@@ -9,6 +9,7 @@ Agent 基础设施相关的方案、汇报、实测和调研，每篇都是自�
 - `*.html`：各篇报告，平铺在根目录，文件名即地址。
 - `pages.json`：首页目录的唯一来源（分组、标题、摘要、日期、旧版本）。
 - `index.html`：由 `tools/build_index.py` 根据 `pages.json` 生成，不要手改。
+- `tools/add_home_link.py`：给缺少返回首页链接的页面补上（发布时自动运行）。
 - `tools/scan.sh`：发布前的脱敏检查（服务器地址、凭据、内部路径、用户标识）。
 - `tools/publish.sh`：复制草稿 → 检查 → 生成首页 → 提交并推送。
 

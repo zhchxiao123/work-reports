@@ -180,11 +180,13 @@
   td a { color: var(--rust); }
   .card p i { font-style: italic; }
 </style>
+<style id="wr-home-style">.wr-home{display:inline-block;margin-bottom:14px;font-size:12px;color:#87867F;text-decoration:none;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}.wr-home:hover{color:#B04A3F}</style>
 </head>
 <body>
 <div class="mini">
   <a class="doc-home" href="agent-infrastructure-briefing.html#a7">← 返回汇报：安全</a>
   <header>
+    <a class="wr-home" href="index.html">← 工作报告首页</a>
     <div class="eyebrow">文章总结 · 沙箱安全</div>
     <h1>快照、克隆与回滚：Agent 沙箱的新安全问题</h1>
     <p class="lead">沙箱能休眠、能快照、能克隆之后，状态就从运行时的临时产物变成了需要长期保管的资产。清理也从“删一个容器”变成了“删一串副本”。安全边界从进程扩展到了状态。</p>

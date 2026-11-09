@@ -175,12 +175,14 @@
   .srcline { margin-top: 24px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
   td code { white-space: nowrap; }
 </style>
+<style id="wr-home-style">.wr-home{display:inline-block;margin-bottom:14px;font-size:12px;color:#87867F;text-decoration:none;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}.wr-home:hover{color:#B04A3F}</style>
 </head>
 <body>
 <div class="mini">
   <a class="doc-home" href="byclaw-durable-roadmap-v2.html#p5">← 返回规划：一轮对话的新数据流</a>
 
   <header>
+    <a class="wr-home" href="index.html">← 工作报告首页</a>
     <div class="eyebrow">新数据流 · 第 1 步详解</div>
     <h1>发出消息：一条消息怎么只算一次</h1>
     <p class="lead">ByClaw 已经有 trace id，不需要再造一个贯穿全链路的新编号。缺的是两件事：把现有编号接到 DSH 已有的去重上，以及宿主重启后有人把这条命令接起来。</p>

@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 msg=""
 [ "${1:-}" = "-m" ] && { msg="$2"; shift 2; }
 for src in "$@"; do cp "$src" .; done
+python3 -I tools/add_home_link.py
 tools/scan.sh
 python3 -I tools/build_index.py
 git add -A

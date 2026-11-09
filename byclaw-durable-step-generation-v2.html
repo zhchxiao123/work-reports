@@ -182,12 +182,14 @@
   .bub.hint { background: rgba(217,119,87,0.12); color: var(--rust); }
   @media (max-width: 760px) { .flow3 { grid-template-columns: 1fr; } .arr { transform: rotate(90deg); } }
 </style>
+<style id="wr-home-style">.wr-home{display:inline-block;margin-bottom:14px;font-size:12px;color:#87867F;text-decoration:none;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}.wr-home:hover{color:#B04A3F}</style>
 </head>
 <body>
 <div class="mini">
   <a class="doc-home" href="byclaw-durable-roadmap-v2.html#p5">← 返回规划：一轮对话的新数据流</a>
 
   <header>
+    <a class="wr-home" href="index.html">← 工作报告首页</a>
     <div class="eyebrow">新数据流 · 第 3 步详解</div>
     <h1>调用模型：重试时前端怎么不重复</h1>
     <p class="lead">重试时模型会生成一段新文字，和上次不会完全一样，所以没法靠给文字去重。正确的做法是告诉前端：上一次尝试作废了，用新的一次替换它。</p>
