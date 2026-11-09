@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muse 数据流架构图：共享入口、vm_id 分发、鉴权链与 Agent 交互</title>
+<style>
+  :root{--ivory:#FAF9F5;--slate:#141413;--clay:#D97757;--oat:#E3DACC;--olive:#788C5D;--rust:#B04A3F;--gray-150:#F0EEE6;--gray-300:#D1CFC5;--gray-500:#87867F;--gray-700:#3D3D3A;
+    --serif:ui-serif,Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ivory);color:var(--slate);font-family:var(--sans);-webkit-font-smoothing:antialiased;padding:28px 24px 96px;padding-right:104px}
+  @media(max-width:980px){body{padding-right:24px}}
+  .sheet{max-width:1300px;margin:0 auto;display:grid;grid-template-columns:176px minmax(0,1fr);gap:34px;align-items:start}
+  .sidenav{position:sticky;top:28px}
+  .brand{margin-bottom:16px;padding-bottom:15px;border-bottom:1.5px solid var(--gray-300)}
+  .brand-eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay);margin-bottom:7px}
+  .brand-title{font-family:var(--serif);font-weight:500;font-size:17px;line-height:1.4}
+  .brand-sub{margin-top:7px;font-family:var(--mono);font-size:10px;color:var(--gray-500)}
+  .toc{display:flex;flex-direction:column;gap:2px}
+  .toc a{font-size:12px;color:var(--gray-500);text-decoration:none;padding:6px 9px;border:1.2px solid transparent;border-radius:7px;display:flex;align-items:baseline;gap:7px;line-height:1.4}
+  .toc a:hover{color:var(--slate);background:var(--gray-150)}
+  .toc a.on{color:var(--slate);font-weight:600;background:#fff;border-color:var(--gray-300)}
+  .toc .num{font-family:var(--mono);font-size:10px;color:var(--clay)}
+  .toc a.on .num{color:var(--rust)}
+  .navhint{margin-top:12px;padding-top:11px;border-top:1px solid var(--gray-150);font-size:10px;line-height:1.6;color:var(--gray-500)}
+  @media(max-width:980px){.sheet{grid-template-columns:1fr;gap:24px}.sidenav{position:static}.toc{flex-direction:row;flex-wrap:wrap;gap:6px}.navhint{display:none}}
+  header{margin-bottom:36px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:10px}
+  h1{font-family:var(--serif);font-weight:500;font-size:33px;margin-bottom:12px}
+  .lead{font-size:14.5px;line-height:1.75;color:var(--gray-700);max-width:830px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--gray-150);padding:1px 5px;border-radius:4px}
+  section{margin-top:58px;scroll-margin-top:24px}
+  section>h2{font-family:var(--serif);font-weight:500;font-size:25px;margin-bottom:8px}
+  section>.sub{font-size:13.5px;color:var(--gray-700);line-height:1.7;max-width:830px;margin-bottom:22px}
+  .n{font-family:var(--mono);font-size:12px;color:var(--clay);margin-right:8px;font-weight:600}
+  .warn{color:var(--rust);font-weight:600}.good{color:var(--olive);font-weight:600}
+  .bridge{margin:42px 0 -14px;padding:4px 0 4px 20px;border-left:3px solid var(--clay);font-family:var(--serif);font-size:16px;line-height:1.6}
+  .bridge b{font-weight:600}.bridge .to{display:block;margin-top:7px;font-family:var(--sans);font-size:13px;color:var(--gray-700)}
+  .card{border:1.5px solid var(--gray-300);border-radius:14px;background:#fff;padding:22px 24px}
+  .card h3{font-family:var(--serif);font-weight:500;font-size:18px;margin-bottom:4px}
+  .card .tag{font-size:11.5px;color:var(--gray-500);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--gray-150)}
+  .card p{font-size:13px;line-height:1.7;color:var(--gray-700)}.card p+p{margin-top:8px}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:860px){.g2,.g3{grid-template-columns:1fr}}
+  figure{border:1.5px solid var(--gray-300);border-radius:14px;background:#fff;padding:20px 22px 16px;margin-bottom:16px}
+  figure>svg{display:block;width:100%;height:auto}
+  .scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  .scroll svg.wide{display:block;width:1400px;min-width:1400px;height:auto}
+  @media(min-width:1700px){.scroll svg.wide{width:100%;min-width:0}}
+
+  figcaption{margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-150);font-size:12.5px;line-height:1.7;color:var(--gray-700)}figcaption b{color:var(--slate)}
+  .fig-h{font-size:12.5px;font-weight:600;margin-bottom:14px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .fig-h span{font-family:var(--mono);font-size:11px;color:var(--clay);font-weight:400}
+  .rf text{font-family:var(--sans);font-size:11.5px;fill:var(--slate)}
+  .rf .lab{font-size:11px;fill:var(--gray-700)}.rf .mono{font-family:var(--mono);font-size:10px;fill:var(--gray-500)}.rf .tiny{font-size:9.5px;fill:var(--gray-500)}
+  .rf .box{fill:#fff;stroke:var(--gray-300);stroke-width:1.5}.rf .box-d{fill:var(--gray-150);stroke:var(--gray-300);stroke-width:1.5}
+  .rf .box-x{fill:rgba(217,119,87,.12);stroke:var(--clay);stroke-width:1.5}.rf .box-ok{fill:rgba(120,140,93,.14);stroke:var(--olive);stroke-width:1.5}
+  .rf .ln{stroke:var(--gray-500);stroke-width:1.5;fill:none}.rf .ln-d{stroke:var(--rust);stroke-width:1.5;fill:none;stroke-dasharray:5 4}.rf .ln-ok{stroke:var(--olive);stroke-width:1.5;fill:none}
+  .rf .ln-b{stroke:#3A4EC9;stroke-width:1.5;fill:none;stroke-dasharray:2 3}
+  .rf .num{font-family:var(--mono);font-size:9.5px;font-weight:700;fill:#fff}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-weight:600;color:var(--gray-700);border-bottom:1.5px solid var(--gray-300);padding:7px 10px 7px 0;white-space:nowrap}
+  td{border-bottom:1px solid var(--gray-150);padding:8px 10px 8px 0;line-height:1.6;color:var(--gray-700);vertical-align:top}
+  td:first-child{font-weight:600;color:var(--slate)}tr:last-child td{border-bottom:none}
+  .delta{margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-150);font-size:12.5px;line-height:1.8;color:var(--gray-700)}.delta b{color:var(--slate)}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;font-size:12px;color:var(--gray-700)}
+  .legend span{display:inline-flex;align-items:center;gap:8px}
+  .chip{width:22px;height:14px;border:1.5px solid var(--gray-300);border-radius:4px;background:#fff}
+  .chip.x{background:rgba(217,119,87,.12);border-color:var(--clay)}.chip.ok{background:rgba(120,140,93,.14);border-color:var(--olive)}.chip.d{background:var(--gray-150)}
+  .chip.line{height:0;border:none;border-top:2px solid var(--gray-500);border-radius:0}.chip.line.red{border-top:2px dashed var(--rust)}.chip.line.green{border-top:2px solid var(--olive)}.chip.line.blue{border-top:2px dotted #3A4EC9}
+  .note{margin-top:44px;border:1.5px solid var(--oat);background:#fff;border-radius:14px;padding:20px 22px}
+  .note h2{font-family:var(--serif);font-weight:500;font-size:20px;margin-bottom:10px}.note ul{list-style:none}
+  .note li{font-size:13.5px;line-height:1.75;color:var(--gray-700);padding-left:18px;position:relative;margin-bottom:7px}.note li::before{content:"◦";position:absolute;left:2px;color:var(--clay)}
+  #annLayer{position:absolute;top:0;left:0;z-index:40;pointer-events:none;overflow:visible}
+  body.ann-on #annLayer{pointer-events:auto;cursor:crosshair}body.ann-on{user-select:none;-webkit-user-select:none}
+  .ann-bar{position:fixed;right:10px;top:50%;transform:translateY(-50%);z-index:60;display:flex;flex-direction:column;gap:4px;background:#fff;border:1.5px solid var(--gray-300);border-radius:13px;padding:9px 7px;box-shadow:0 6px 22px rgba(20,20,19,.12);width:74px;opacity:.94}
+  .ann-bar.hidden{display:none}.ann-bar:hover{opacity:1}
+  .ann-bar button{font-family:inherit;font-size:11px;color:var(--gray-700);background:var(--gray-150);border:1px solid var(--gray-300);border-radius:8px;padding:6px 2px;cursor:pointer;white-space:nowrap;width:100%}
+  .ann-bar button:hover{background:#fff;color:var(--slate)}.ann-bar button.on{background:var(--clay);border-color:var(--clay);color:#fff;font-weight:600}
+  .ann-bar button.primary{background:var(--slate);border-color:var(--slate);color:#fff;font-weight:600}.ann-bar button.primary.on{background:var(--clay);border-color:var(--clay)}
+  .ann-bar .sep{height:1px;width:100%;background:var(--gray-300);margin:4px 0 3px}
+  .ann-bar input[type=color]{width:100%;height:26px;padding:0;border:1px solid var(--gray-300);border-radius:7px;background:none;cursor:pointer}
+  .ann-bar input[type=range]{width:100%;accent-color:var(--clay);cursor:pointer;margin:2px 0}
+  .ann-launch{position:fixed;right:10px;top:50%;transform:translateY(-50%);z-index:60;display:none;font-family:inherit;font-size:12px;color:var(--gray-700);background:#fff;border:1.5px solid var(--gray-300);border-radius:10px;padding:14px 7px;cursor:pointer;box-shadow:0 6px 22px rgba(20,20,19,.12);writing-mode:vertical-rl;letter-spacing:.1em}
+  .ann-launch.show{display:block}.ann-launch:hover{color:var(--slate);border-color:var(--clay)}
+  @media print{.ann-bar,.ann-launch,.sidenav{display:none!important}}
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button><span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen">画笔</button><button class="ann-tool" data-tool="mark">荧光笔</button><button class="ann-tool" data-tool="eraser">橡皮擦</button><span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757"><input type="range" id="annSize" min="2" max="26" value="4"><span class="sep"></span>
+  <button id="annUndo">撤销</button><button id="annClear">清空</button><button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch">✎ 标注</button>
+
+<div class="sheet">
+  <aside class="sidenav">
+    <div class="brand">
+      <div class="brand-eyebrow">逆向分析报告 · 第三篇</div>
+      <div class="brand-title">Muse 数据流<br>架构图</div>
+      <div class="brand-sub">com.meta.endo 10.0 · 2026-11-01</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#sec-overview" data-sec="sec-overview"><span class="num">01</span><span>端到端数据流全景</span></a>
+      <a href="#sec-auth" data-sec="sec-auth"><span class="num">02</span><span>鉴权与信任链</span></a>
+      <a href="#sec-agent" data-sec="sec-agent"><span class="num">03</span><span>Agent 交互能力</span></a>
+      <a href="#sec-layers" data-sec="sec-layers"><span class="num">04</span><span>一条消息穿过的 12 层</span></a>
+      <a href="#sec-lifecycle" data-sec="sec-lifecycle"><span class="num">05</span><span>长连接的生命周期</span></a>
+      <a href="#sec-proto" data-sec="sec-proto"><span class="num">06</span><span>消息级协议</span></a>
+      <a href="#sec-notes" data-sec="sec-notes"><span class="num">07</span><span>图例与边界</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 右侧可圈画标注</div>
+  </aside>
+
+  <main class="main">
+  <header>
+    <div class="eyebrow">Data-flow architecture · derived from static analysis · see reports 1 and 2 for evidence</div>
+    <h1>Muse 数据流架构图：共享入口、vm_id 分发、鉴权链与 Agent 交互</h1>
+    <p class="lead">把前两篇的发现压成三张图。核心事实：客户端<strong>永远拨号共享入口</strong> <code>hatch.metaaivm.com</code>，入口（ingress 反向代理）按 <code>vm_id</code> 把 Noise 隧道转发到用户 VM；Noise 在 VM 内终止，边缘看不到明文；VM 内网关再按 ServiceFrame 的 <code>service</code> 字段分发到 daemon / sentinel / vault / authd / ssh_access。图中实线为观察到的链路，虚线为推断。</p>
+  </header>
+
+  <section id="sec-overview" style="margin-top:4px">
+    <h2><span class="n">01</span>端到端数据流全景</h2>
+    <p class="sub">四列：客户端 · Meta 控制面与边缘 · 用户 VM · 外部。编号对应下表的协议与鉴权。</p>
+    <figure>
+      <div class="fig-h">图 1 · 端到端数据流<span>可左右拖动 · 实线观察到 · 赤色虚线 = VM 反向调用本机 · 蓝点线 = 推断</span></div>
+            <div class="scroll"><svg class="rf wide" viewBox="0 0 1400 840" role="img" aria-label="端到端数据流">
+        <defs>
+          <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+          <marker id="m1o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#788C5D"/></marker>
+          <marker id="m1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker>
+          <marker id="m1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A4EC9"/></marker>
+        </defs>
+        <!-- top band: Meta control plane -->
+        <rect x="20" y="20" width="1360" height="200" rx="14" fill="none" stroke="#D1CFC5" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <text x="36" y="44" style="fill:#87867F;font-weight:600;font-size:12px">Meta 控制面与媒体服务（不在 Noise 隧道内）</text>
+        <rect class="box" x="40" y="60" width="240" height="140" rx="10"/>
+        <text x="160" y="84" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">账号与登录</text>
+        <text x="160" y="106" class="lab" text-anchor="middle" style="fill:#3D3D3A">auth.meta.com · OIDC</text>
+        <text x="160" y="124" class="lab" text-anchor="middle" style="fill:#3D3D3A">passkey · OTP · 2FA · SSO</text>
+        <text x="160" y="142" class="lab" text-anchor="middle" style="fill:#3D3D3A">accountscenter.meta.com</text>
+        <text x="160" y="166" class="tiny" text-anchor="middle" style="fill:#87867F">产出：账号会话</text>
+        <rect class="box" x="310" y="60" width="300" height="140" rx="10"/>
+        <text x="460" y="84" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">控制面 API（/hatch/*，60 余条）</text>
+        <text x="460" y="106" class="lab" text-anchor="middle" style="fill:#3D3D3A">hatch-api.meta.ai · api.meta.ai</text>
+        <text x="460" y="124" class="lab" text-anchor="middle" style="fill:#3D3D3A">token · noise-notary-token · lease_vm</text>
+        <text x="460" y="142" class="lab" text-anchor="middle" style="fill:#3D3D3A">acs/bind-cvm · ssh-access/tokens · invites</text>
+        <text x="460" y="160" class="lab" text-anchor="middle" style="fill:#3D3D3A">subscription · channels · shared-agents/claim</text>
+        <text x="460" y="182" class="tiny" text-anchor="middle" style="fill:#87867F">产出：auth_token + notary_token · VM 租约</text>
+        <rect class="box" x="640" y="60" width="220" height="140" rx="10"/>
+        <text x="750" y="84" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">CDN · 上传 · 更新 · 遥测</text>
+        <text x="750" y="106" class="lab" text-anchor="middle" style="fill:#3D3D3A">scontent.xx.fbcdn.net</text>
+        <text x="750" y="124" class="lab" text-anchor="middle" style="fill:#3D3D3A">rupload.meta.ai</text>
+        <text x="750" y="142" class="lab" text-anchor="middle" style="fill:#3D3D3A">Sparkle appcast（EdDSA 签名）</text>
+        <text x="750" y="160" class="lab" text-anchor="middle" style="fill:#3D3D3A">QPL · analytics · Crashpad</text>
+        <rect class="box" x="890" y="60" width="220" height="140" rx="10"/>
+        <text x="1000" y="84" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">实时媒体</text>
+        <text x="1000" y="106" class="lab" text-anchor="middle" style="fill:#3D3D3A">meta-ai-realtime.facebook.com</text>
+        <text x="1000" y="124" class="lab" text-anchor="middle" style="fill:#3D3D3A">stun:edge-stun.facebook.com:3478</text>
+        <text x="1000" y="142" class="lab" text-anchor="middle" style="fill:#3D3D3A">shortwave ASR（WSS 双工）</text>
+        <text x="1000" y="160" class="lab" text-anchor="middle" style="fill:#3D3D3A">TTS 流（SSE）</text>
+        <rect x="1140" y="60" width="220" height="140" rx="10" fill="none" stroke="#3A4EC9" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="1250" y="84" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">模型推理（位置推断）</text>
+        <text x="1250" y="106" class="lab" text-anchor="middle" style="fill:#3D3D3A">model.get / model.set</text>
+        <text x="1250" y="124" class="lab" text-anchor="middle" style="fill:#3D3D3A">generation 版本化选型</text>
+        <text x="1250" y="142" class="lab" text-anchor="middle" style="fill:#3D3D3A">hatch_big_boy_models 开关</text>
+        <text x="1250" y="166" class="tiny" text-anchor="middle" style="fill:#87867F">模型名在包内被抹掉</text>
+        <!-- main row headers -->
+        <text x="24" y="258" style="fill:#87867F;font-weight:600;font-size:12px">客户端</text>
+        
+        <text x="890" y="258" text-anchor="middle" style="fill:#87867F;font-weight:600;font-size:12px">用户 VM（每人一台，Noise 在此终止）</text>
+        <text x="1280" y="258" text-anchor="middle" style="fill:#87867F;font-weight:600;font-size:12px">外部</text>
+        <!-- client column -->
+        <rect class="box-d" x="20" y="270" width="280" height="250" rx="12"/>
+        <text x="160" y="294" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">Mac 应用（app_id=endo-macos）</text>
+        <text x="160" y="318" class="lab" text-anchor="middle" style="fill:#3D3D3A">原生壳：登录态 · 同源代理 /api/hatch/*</text>
+        <text x="160" y="338" class="lab" text-anchor="middle" style="fill:#3D3D3A">web 聊天层：Noise 会话 ①（聊天）</text>
+        <text x="160" y="358" class="lab" text-anchor="middle" style="fill:#3D3D3A">Endo 节点：Noise 会话 ②（工具）</text>
+        <text x="160" y="378" class="lab" text-anchor="middle" style="fill:#3D3D3A">HatchTools：邮件 · 信息 · 文件 · 日历</text>
+        <text x="160" y="398" class="lab" text-anchor="middle" style="fill:#3D3D3A">电脑控制（后台虚拟显示器）</text>
+        <text x="160" y="418" class="lab" text-anchor="middle" style="fill:#3D3D3A">rsys：语音通话 · Voyager 听写</text>
+        <text x="160" y="438" class="lab" text-anchor="middle" style="fill:#3D3D3A">Chrome 扩展（Native Messaging）</text>
+        <text x="160" y="458" class="lab" text-anchor="middle" style="fill:#3D3D3A">数据同步：日历 / 联系人 / 邮件 / iMessage</text>
+        <text x="160" y="478" class="lab" text-anchor="middle" style="fill:#3D3D3A">TCC 权限 · HITL 审批卡 · Blocked folders</text>
+        <text x="160" y="504" class="mono" text-anchor="middle" style="fill:#87867F">Ed25519 notary 背书钥 · rvKey（CVM）</text>
+        <rect class="box-d" x="20" y="540" width="280" height="70" rx="12"/>
+        <text x="160" y="564" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">浏览器 embed · 手机 app</text>
+        <text x="160" y="586" class="lab" text-anchor="middle" style="fill:#3D3D3A">同一 web 客户端，vm_id 可由入口解析</text>
+        <!-- ingress -->
+        <rect class="box-x" x="360" y="300" width="240" height="220" rx="12"/>
+        <text x="480" y="324" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">共享入口</text>
+        <text x="480" y="346" class="mono" text-anchor="middle" style="fill:#3D3D3A">wss://hatch.metaaivm.com/v1/noise</text>
+        <text x="480" y="368" class="lab" text-anchor="middle" style="fill:#3D3D3A">?vm_id&amp;auth_token&amp;notary_token</text>
+        <text x="480" y="386" class="lab" text-anchor="middle" style="fill:#3D3D3A">&amp;app_id&amp;app_version&amp;request_id</text>
+        <line x1="376" y1="398" x2="584" y2="398" stroke="#E3DACC"/>
+        <text x="480" y="418" class="lab" text-anchor="middle" style="fill:#3D3D3A">Meta 边缘：TLS 终止（匿名 401）</text>
+        <text x="480" y="436" class="lab" text-anchor="middle" style="fill:#3D3D3A">ingress_rev_proxy：校验 auth_token</text>
+        <text x="480" y="454" class="lab" text-anchor="middle" style="fill:#3D3D3A">按 vm_id 转发 NoiseTransportFrame</text>
+        <text x="480" y="478" class="lab" text-anchor="middle" style="fill:#B04A3F;font-weight:600">不持有 Noise 密钥，看不到明文</text>
+        <text x="480" y="500" class="tiny" text-anchor="middle" style="fill:#87867F">&lt;vm_id&gt;.metaaivm.com 仅为逻辑标识（无 DNS）</text>
+        <!-- VM container -->
+        <rect x="660" y="270" width="460" height="500" rx="14" fill="rgba(120,140,93,0.06)" stroke="#788C5D" stroke-width="1.5"/>
+        <rect class="box-ok" x="680" y="290" width="420" height="80" rx="10"/>
+        <text x="890" y="314" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">VM 网关（Noise 终止）</text>
+        <text x="890" y="336" class="lab" text-anchor="middle" style="fill:#3D3D3A">Noise XX · SEV-SNP 证明 · RV 密钥 HMAC 互证</text>
+        <text x="890" y="356" class="lab" text-anchor="middle" style="fill:#3D3D3A">hatch.noise.ServiceFrame 按 service 分发（stream_id 多路复用）</text>
+        <rect class="box-ok" x="680" y="390" width="240" height="250" rx="10"/>
+        <text x="790" y="414" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">daemon（agent 运行时）</text>
+        <text x="790" y="438" class="lab" text-anchor="middle" style="fill:#3D3D3A">sessions · chat.send / stream</text>
+        <text x="790" y="456" class="lab" text-anchor="middle" style="fill:#3D3D3A">工具路由 · 子代理 lane · compaction</text>
+        <text x="790" y="474" class="lab" text-anchor="middle" style="fill:#3D3D3A">nodes.invoke → 本机 / web 节点</text>
+        <text x="790" y="492" class="lab" text-anchor="middle" style="fill:#3D3D3A">VM 浏览器任务（lease · takeover）</text>
+        <text x="790" y="510" class="lab" text-anchor="middle" style="fill:#3D3D3A">tool.exec · imagine · web_fetch</text>
+        <text x="790" y="528" class="lab" text-anchor="middle" style="fill:#3D3D3A">cron 任务 · goals · feed · ideas</text>
+        <text x="790" y="546" class="lab" text-anchor="middle" style="fill:#3D3D3A">fs · library · memory · spaces</text>
+        <text x="790" y="564" class="lab" text-anchor="middle" style="fill:#3D3D3A">peers · shared agents · channels</text>
+        <text x="790" y="582" class="lab" text-anchor="middle" style="fill:#3D3D3A">HITL 门控 · 能力注册</text>
+        <text x="790" y="606" class="tiny" text-anchor="middle" style="fill:#87867F">service=daemon（45 条路由显式标记）</text>
+        <text x="790" y="624" class="tiny" text-anchor="middle" style="fill:#87867F">未标记的路由默认走 daemon</text>
+        <rect class="box-ok" x="940" y="390" width="160" height="70" rx="10"/>
+        <text x="1020" y="414" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">sentinel（出网管控）</text>
+        <text x="1020" y="434" class="lab" text-anchor="middle" style="fill:#3D3D3A">tproxy · mitm · SNI 拒绝</text>
+        <text x="1020" y="450" class="lab" text-anchor="middle" style="fill:#3D3D3A">审批 · 作用域 · 网络规则</text>
+        <rect class="box-ok" x="940" y="480" width="160" height="60" rx="10"/>
+        <text x="1020" y="504" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">vault</text>
+        <text x="1020" y="524" class="lab" text-anchor="middle" style="fill:#3D3D3A">LUKS 加密盘 · /luks/status</text>
+        <rect class="box-ok" x="940" y="560" width="160" height="60" rx="10"/>
+        <text x="1020" y="584" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">authd</text>
+        <text x="1020" y="604" class="lab" text-anchor="middle" style="fill:#3D3D3A">OAuth 回调 · credentials.*</text>
+        <rect class="box-ok" x="940" y="640" width="160" height="40" rx="10"/>
+        <text x="1020" y="665" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12px">ssh_access <tspan class="tiny" style="fill:#3D3D3A;font-weight:400">· 需 notary 头</tspan></text>
+        <rect class="box" x="680" y="660" width="240" height="90" rx="10"/>
+        <text x="800" y="682" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12px">持久化（VM 文件系统）</text>
+        <text x="800" y="702" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/home/hatch/workspace/</text>
+        <text x="800" y="716" class="tiny" text-anchor="middle" style="fill:#3D3D3A">{your_files, artifacts, podcasts, conversations}</text>
+        <text x="800" y="730" class="tiny" text-anchor="middle" style="fill:#3D3D3A">uploads/ · /MEMORY.md · git 历史 · fs.subscribe</text>
+        <text x="1020" y="712" class="tiny" text-anchor="middle" style="fill:#87867F">VM 内浏览器 · Spaces 进程</text>
+        <text x="1020" y="728" class="tiny" text-anchor="middle" style="fill:#87867F">均受 sentinel 出网约束</text>
+        <!-- external column -->
+        <rect class="box" x="1180" y="270" width="200" height="70" rx="12"/>
+        <text x="1280" y="294" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">透明日志与吊销</text>
+        <text x="1280" y="314" class="lab" text-anchor="middle" style="fill:#3D3D3A">Cloudflare Plexi · Sigstore</text>
+        <text x="1280" y="330" class="tiny" text-anchor="middle" style="fill:#87867F">证明随 msg2 携带，客户端离线校验</text>
+        <rect class="box" x="1180" y="360" width="200" height="70" rx="12"/>
+        <text x="1280" y="384" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">其他用户的 VM</text>
+        <text x="1280" y="404" class="lab" text-anchor="middle" style="fill:#3D3D3A">peers（SAS 验证）· 共享 agent</text>
+        <text x="1280" y="420" class="tiny" text-anchor="middle" style="fill:#87867F">经同一共享入口，非 P2P</text>
+        <rect class="box" x="1180" y="450" width="200" height="60" rx="12"/>
+        <text x="1280" y="474" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">互联网</text>
+        <text x="1280" y="494" class="lab" text-anchor="middle" style="fill:#3D3D3A">网页 · SaaS API · 下载</text>
+        <rect class="box" x="1180" y="610" width="200" height="70" rx="12"/>
+        <text x="1280" y="634" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">IM 渠道（用户手机）</text>
+        <text x="1280" y="654" class="lab" text-anchor="middle" style="fill:#3D3D3A">WhatsApp · Messenger · Telegram</text>
+        <text x="1280" y="670" class="tiny" text-anchor="middle" style="fill:#87867F">channels.link 绑定；送达路径推断</text>
+        <path class="ln-b" d="M1176,640 L1122,640" marker-end="url(#m1b)"/><path class="ln-b" d="M1122,650 L1176,650" marker-end="url(#m1b)"/><circle cx="1140" cy="626" r="8" fill="#3A4EC9"/><text x="1140" y="630" class="num" text-anchor="middle">12</text>
+        <rect class="box" x="1180" y="530" width="200" height="60" rx="12"/>
+        <text x="1280" y="554" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">OAuth 提供方</text>
+        <text x="1280" y="574" class="lab" text-anchor="middle" style="fill:#3D3D3A">Google · 1Password · 自定义</text>
+        <!-- flows: client -> control plane (fan out from Mac top) -->
+        <path class="ln" d="M80,270 L140,204" marker-end="url(#m1)"/><circle cx="102" cy="246" r="8" fill="#87867F"/><text x="102" y="250" class="num" text-anchor="middle">1</text>
+        <path class="ln" d="M140,270 L430,204" marker-end="url(#m1)"/><circle cx="246" cy="246" r="8" fill="#87867F"/><text x="246" y="250" class="num" text-anchor="middle">2</text>
+        <path class="ln" d="M200,270 L720,204" marker-end="url(#m1)"/><circle cx="420" cy="242" r="8" fill="#87867F"/><text x="420" y="246" class="num" text-anchor="middle">13</text>
+        <path class="ln" d="M260,270 L960,204" marker-end="url(#m1)"/><circle cx="600" cy="238" r="8" fill="#87867F"/><text x="600" y="242" class="num" text-anchor="middle">8</text>
+        <!-- IM channel -> control plane via gutter -->
+        <!-- main path: client -> ingress -> VM gateway (green) -->
+        <path class="ln-ok" d="M302,340 L356,340" marker-end="url(#m1o)"/><circle cx="329" cy="326" r="8" fill="#788C5D"/><text x="329" y="330" class="num" text-anchor="middle">3</text>
+        <path class="ln-ok" d="M602,340 L676,340" marker-end="url(#m1o)"/><circle cx="639" cy="326" r="8" fill="#788C5D"/><text x="639" y="330" class="num" text-anchor="middle">4</text>
+        <text x="639" y="358" class="tiny" text-anchor="middle" style="fill:#788C5D">原样转发</text>
+        <!-- reverse node invoke (red dashed) -->
+        <path class="ln-d" d="M676,470 L602,470" marker-end="url(#m1r)"/><path class="ln-d" d="M356,470 L302,470" marker-end="url(#m1r)"/>
+        <circle cx="639" cy="486" r="8" fill="#B04A3F"/><text x="639" y="490" class="num" text-anchor="middle">5</text>
+        <text x="639" y="508" class="tiny" text-anchor="middle" style="fill:#B04A3F">node.invoke</text>
+        <text x="329" y="488" class="tiny" text-anchor="middle" style="fill:#B04A3F">节点通道</text>
+        <!-- embed -> ingress -->
+        <path class="ln-ok" d="M302,575 L340,575 L340,520 L420,520" marker-end="url(#m1o)"/>
+        <!-- inside VM -->
+        <path class="ln" d="M790,372 L790,386" marker-end="url(#m1)"/><path class="ln" d="M1020,372 L1020,386" marker-end="url(#m1)"/>
+        <path class="ln" d="M922,425 L936,425" marker-end="url(#m1)"/><path class="ln" d="M922,510 L936,510" marker-end="url(#m1)"/><path class="ln" d="M922,590 L936,590" marker-end="url(#m1)"/>
+        <path class="ln" d="M790,642 L790,656" marker-end="url(#m1)"/><path class="ln" d="M810,656 L810,642" marker-end="url(#m1)"/>
+        <!-- VM -> external -->
+        <path class="ln" d="M1102,425 L1176,478" marker-end="url(#m1)"/><circle cx="1140" cy="440" r="8" fill="#87867F"/><text x="1140" y="444" class="num" text-anchor="middle">6</text>
+        <path class="ln" d="M1102,585 L1176,560" marker-end="url(#m1)"/><path class="ln" d="M1176,572 L1102,597" marker-end="url(#m1)"/><circle cx="1140" cy="600" r="8" fill="#87867F"/><text x="1140" y="604" class="num" text-anchor="middle">7</text>
+        <path class="ln" d="M1102,350 L1176,392" marker-end="url(#m1)"/><path class="ln" d="M1176,402 L1102,362" marker-end="url(#m1)"/><circle cx="1140" cy="396" r="8" fill="#87867F"/><text x="1140" y="400" class="num" text-anchor="middle">10</text>
+        <path class="ln-b" d="M1102,310 L1176,300" marker-end="url(#m1b)"/><circle cx="1140" cy="290" r="8" fill="#3A4EC9"/><text x="1140" y="294" class="num" text-anchor="middle">11</text>
+        <!-- VM -> model inference (inferred, blue) -->
+        <path class="ln-b" d="M1040,270 L1200,204" marker-end="url(#m1b)"/><circle cx="1120" cy="248" r="8" fill="#3A4EC9"/><text x="1120" y="252" class="num" text-anchor="middle">9</text>
+        <!-- notes -->
+        <line x1="20" y1="786" x2="1380" y2="786" stroke="#F0EEE6" stroke-width="1.5"/>
+        <text x="20" y="806" class="lab" style="fill:#3D3D3A">读法：③④ 是一条端到端 Noise 隧道，中间的共享入口只做 TLS 终止、token 校验与按 vm_id 转发；⑤ 是 VM 通过第二条 Noise 会话（原生节点）反向下发工具调用；①②⑧⑫⑬ 都是旁路，不进隧道。</text>
+        <text x="20" y="826" class="tiny" style="fill:#87867F">蓝点线为推断：模型推理在 VM 外（⑨）；透明日志证明由 VM 随 msg2 携带、客户端离线校验（⑪）。编号对应下表。</text>
+      </svg></div>
+
+      <figcaption><b>图的中心不是 Meta 的 API，而是用户自己的 VM</b>：控制面只负责"把你引到你的 VM 并给你凭据"，之后的对话、工具、文件、记忆都在 VM 与客户端之间的 Noise 隧道里完成。</figcaption>
+    </figure>
+    <div class="card">
+      <table>
+        <tr><th style="width:5%">#</th><th style="width:22%">链路</th><th style="width:30%">协议 / 载体</th><th>鉴权与约束</th></tr>
+        <tr><td>1</td><td>登录</td><td>HTTPS，OIDC（<code>auth.meta.com/oidc</code>）、passkey、OTP、2FA、SSO、设备登录</td><td>得到账号会话；设备 ID 持久于 Keychain（<code>EndoAuthDurableDeviceID</code>）。</td></tr>
+        <tr><td>2</td><td>控制面</td><td>HTTPS JSON，<code>/hatch/*</code>（60 余条）；web 层经原生壳同源代理 <code>/api/hatch/*</code></td><td>账号会话 → <code>auth_token</code> + <code>notary_token</code>；机密 VM 的 <code>delegation.</code> 令牌需客户端 Ed25519 背书；租约 <code>lease_vm</code> / <code>bind-cvm</code> / <code>issue-token</code>。</td></tr>
+        <tr><td>3</td><td>聊天通道</td><td>WSS → <code>hatch.metaaivm.com/v1/noise</code>，参数 vm_id / auth_token / notary_token / app_id / request_id；内层 Noise_XX_25519_AESGCM_SHA256</td><td>入口校验 auth_token 并按 vm_id 转发；握手里 VM 出示 SEV-SNP 证明（绑定其 X25519 静态钥）；机密 VM 还有 RV 密钥 HMAC 互证。</td></tr>
+        <tr><td>4</td><td>入口 → VM</td><td>转发 <code>ingress_rev_proxy.NoiseTransportFrame</code>（分块、AES-GCM 密文）</td><td>边缘不持有 Noise 密钥，看不到明文；VM 网关解密后按 <code>hatch.noise.ServiceRequest.service</code> 分发。</td></tr>
+        <tr><td>5</td><td>节点通道（反向）</td><td>原生 <code>HCHTigonRoutedNoiseGatewayTransport</code>，同样到共享入口；<code>node.register / heartbeat</code>，VM 下发 <code>node.invoke</code></td><td>节点注册绑定 <code>node_id + link_nonce</code>；每个 invoke 过权限门控与 HITL 审批卡；文件结果经 <code>NodeInvokeResultUploader</code>。</td></tr>
+        <tr><td>6</td><td>VM 出网</td><td>透明代理 tproxy，可 MITM，按 SNI 拒绝，网络规则</td><td><code>egress.approvals</code> 按"域名 + 任务"审批；作用域权限（连接器 / 定时任务 / 聊天）；可撤销重置。</td></tr>
+        <tr><td>7</td><td>连接器授权</td><td>OAuth / API key / 用户名密码，回调到 <code>/v1/*-auth/callback</code>（authd）</td><td>凭据由 authd 管理（<code>/v1/credentials/*</code> 全部标 service=authd，含 capture 与 1Password 集成），落盘在 vault 管理的 LUKS 加密卷上（推断）；共享给他人时只给描述符不给明文。</td></tr>
+        <tr><td>8</td><td>语音</td><td>rsys WebRTC（STUN/TURN）到 <code>meta-ai-realtime.facebook.com</code>；数据通道跑 Nebula（OpenAI Realtime 形状，Thrift）；ASR WSS；TTS SSE</td><td>由 <code>voice.calls.join</code> / <code>media_endpoint</code> 建立；通话时上报位置（文案明示）。</td></tr>
+        <tr><td>9</td><td>模型推理</td><td><span class="warn">推断</span>：VM 外的推理服务</td><td><code>model.get/set</code> 带 generation；<code>hatch_big_boy_models</code> 开关；模型名在包内被抹掉。</td></tr>
+        <tr><td>10</td><td>用户间互联</td><td>peers：邀请 → SAS 短认证串人工比对 → 收件箱投递；shared agents：对方 VM 经共享入口 + OAuth 令牌，<code>connectionClass=shared_agent</code></td><td>关系带代际号与修订号；共享 agent 连接要求 msg2 必须是证明、拒绝 RV 质询。</td></tr>
+        <tr><td>11</td><td>证明校验</td><td>VM 在 msg2 携带 <code>thatch.attestation.v1.AttestationBundle</code>；客户端本地验证</td><td>VCEK→ASK→ARK 链、CRL、report_data 绑定、度量 ∈ image_manifest、芯片白名单、Plexi/Sigstore 透明证明、吊销证据。</td></tr>
+        <tr><td>12</td><td>IM 渠道</td><td>用户在手机 WhatsApp / Messenger / Telegram 里与 agent 对话；<code>channels.link / status / unlink</code>，companion 解锁</td><td>渠道绑定经控制面完成；消息送达 VM daemon 的具体路径<span class="warn">属推断</span>（图中蓝点线）。</td></tr>
+        <tr><td>13</td><td>内容与遥测</td><td>fbcdn / rupload.meta.ai / Sparkle appcast（EdDSA）/ QPL、Crashpad、Sentry</td><td>与 VM 隧道无关的旁路。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>鉴权发生在三个不同的地方：<b>控制面</b>（你是谁，给你 token）、<b>入口</b>（token 对不对，转给哪台 VM）、<b>VM 内</b>（Noise 对端是谁、RV 密钥对不对、这个动作/这次出网准不准）。边缘只能做第二件事。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>全景里鉴权散在三处。</b><span class="to">↓　把它们按先后串成一条链。</span></div>
+
+  <section id="sec-auth">
+    <h2><span class="n">02</span>鉴权与信任链</h2>
+    <p class="sub">从"用户登录"到"agent 真的能删一个文件"，中间要过八道门。每道门验证的对象不同。</p>
+    <figure>
+      <div class="fig-h">图 2 · 八道门<span>上：验证什么 · 下：凭什么</span></div>
+      <svg class="rf" viewBox="0 0 760 330" role="img" aria-label="鉴权与信任链">
+        <defs><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <!-- row 1: gates 1-4 -->
+        <rect class="box" x="14" y="30" width="170" height="104" rx="10"/>
+        <text x="99" y="50" text-anchor="middle" style="fill:#141413;font-weight:600">① 账号</text>
+        <text x="99" y="68" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：用户是谁</text>
+        <text x="99" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：OIDC · passkey · 2FA</text>
+        <text x="99" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">产出：账号会话</text>
+        <text x="99" y="118" class="mono" text-anchor="middle" style="fill:#87867F">auth.meta.com</text>
+        <path class="ln" d="M186,82 L200,82" marker-end="url(#m2)"/>
+        <rect class="box" x="204" y="30" width="170" height="104" rx="10"/>
+        <text x="289" y="50" text-anchor="middle" style="fill:#141413;font-weight:600">② 令牌</text>
+        <text x="289" y="68" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：会话有效、VM 归属</text>
+        <text x="289" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：会话 → auth_token</text>
+        <text x="289" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">+ notary_token（绑定 vmName）</text>
+        <text x="289" y="118" class="mono" text-anchor="middle" style="fill:#87867F">/api/hatch/token</text>
+        <path class="ln" d="M376,82 L390,82" marker-end="url(#m2)"/>
+        <rect class="box-x" x="394" y="30" width="170" height="104" rx="10"/>
+        <text x="479" y="50" text-anchor="middle" style="fill:#141413;font-weight:600">③ 入口准入</text>
+        <text x="479" y="68" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：token 对不对、转给谁</text>
+        <text x="479" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：vm_id + auth_token 查询参数</text>
+        <text x="479" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">机密 VM：客户端 Ed25519 背书</text>
+        <text x="479" y="118" class="mono" text-anchor="middle" style="fill:#87867F">hatch.metaaivm.com</text>
+        <path class="ln" d="M566,82 L580,82" marker-end="url(#m2)"/>
+        <rect class="box-ok" x="584" y="30" width="162" height="104" rx="10"/>
+        <text x="665" y="50" text-anchor="middle" style="fill:#141413;font-weight:600">④ Noise XX</text>
+        <text x="665" y="68" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：对端持有静态钥</text>
+        <text x="665" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：X25519 · AES-GCM</text>
+        <text x="665" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">产出：双向 CipherState</text>
+        <text x="665" y="118" class="mono" text-anchor="middle" style="fill:#87867F">msg1 · msg2 · msg3</text>
+        <!-- down connector -->
+        <path class="ln" d="M665,136 L665,150 L99,150 L99,164" marker-end="url(#m2)"/>
+        <!-- row 2: gates 5-8 -->
+        <rect class="box-ok" x="14" y="168" width="170" height="104" rx="10"/>
+        <text x="99" y="188" text-anchor="middle" style="fill:#141413;font-weight:600">⑤ 远程证明</text>
+        <text x="99" y="206" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：静态钥属于可信 VM</text>
+        <text x="99" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：SEV-SNP 报告 + 镜像清单</text>
+        <text x="99" y="238" class="tiny" text-anchor="middle" style="fill:#3D3D3A">+ 透明日志 + 芯片白名单</text>
+        <text x="99" y="256" class="mono" text-anchor="middle" style="fill:#87867F">客户端本地校验</text>
+        <path class="ln" d="M186,220 L200,220" marker-end="url(#m2)"/>
+        <rect class="box-ok" x="204" y="168" width="170" height="104" rx="10"/>
+        <text x="289" y="188" text-anchor="middle" style="fill:#141413;font-weight:600">⑥ RV 密钥（机密 VM）</text>
+        <text x="289" y="206" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：客户端是之前那个客户端</text>
+        <text x="289" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：首连配发 rvKey，之后</text>
+        <text x="289" y="238" class="tiny" text-anchor="middle" style="fill:#3D3D3A">HMAC-SHA256 双向 proof</text>
+        <text x="289" y="256" class="mono" text-anchor="middle" style="fill:#87867F">hatch.noise-auth.*.v1</text>
+        <path class="ln" d="M376,220 L390,220" marker-end="url(#m2)"/>
+        <rect class="box" x="394" y="168" width="170" height="104" rx="10"/>
+        <text x="479" y="188" text-anchor="middle" style="fill:#141413;font-weight:600">⑦ 请求级授权</text>
+        <text x="479" y="206" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：这个客户端可调这个服务</text>
+        <text x="479" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：ServiceFrame.service</text>
+        <text x="479" y="238" class="tiny" text-anchor="middle" style="fill:#3D3D3A">+ x-hatch-notary-authorization</text>
+        <text x="479" y="256" class="mono" text-anchor="middle" style="fill:#87867F">ssh_access 必带 notary 头</text>
+        <path class="ln" d="M566,220 L580,220" marker-end="url(#m2)"/>
+        <rect class="box-x" x="584" y="168" width="162" height="104" rx="10"/>
+        <text x="665" y="188" text-anchor="middle" style="fill:#141413;font-weight:600">⑧ 动作与出网审批</text>
+        <text x="665" y="206" class="tiny" text-anchor="middle" style="fill:#3D3D3A">验证：用户允许这件事吗</text>
+        <text x="665" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭：HITL 审批卡 · sentinel</text>
+        <text x="665" y="238" class="tiny" text-anchor="middle" style="fill:#3D3D3A">allow_once / always / deny…</text>
+        <text x="665" y="256" class="mono" text-anchor="middle" style="fill:#87867F">持久化、可撤销</text>
+        <line x1="14" y1="290" x2="746" y2="290" stroke="#F0EEE6" stroke-width="1.5"/>
+        <text x="14" y="310" class="lab" style="fill:#3D3D3A">颜色：灰 = Meta 服务侧验证 · <tspan style="fill:#D97757;font-weight:600">橙 = 入口 / 用户决定</tspan> · <tspan style="fill:#788C5D;font-weight:600">绿 = 在客户端与 VM 之间端到端完成，边缘不参与</tspan></text>
+        <text x="14" y="326" class="tiny" style="fill:#87867F">旁路：节点注册 node_id + link_nonce 把 web 客户端与原生节点绑成一组设备；peers 用 SAS 短认证串人工比对；机密 VM 数据盘以用户 PIN 解锁 LUKS。</text>
+      </svg>
+      <figcaption><b>④⑤⑥ 三道门是这套系统与普通 SaaS 的本质区别</b>：它们让"Meta 的边缘和控制面都看不到对话明文"成为可以被客户端验证的属性，而不只是隐私政策里的承诺。</figcaption>
+    </figure>
+  </section>
+
+  <div class="bridge"><b>过了八道门，agent 才开始干活。</b><span class="to">↓　它干活时和谁交互、走哪条线？</span></div>
+
+  <section id="sec-agent">
+    <h2><span class="n">03</span>Agent 交互能力</h2>
+    <p class="sub">以 VM 内的 daemon 为中心：左边是触发它的输入，右边是它能调用的三类工具后端与外部，下面是它读写的持久化，上面是推理。</p>
+    <figure>
+      <div class="fig-h">图 3 · Agent 交互能力图<span>以 daemon 为中心的输入 · 工具 · 持久化</span></div>
+      <svg class="rf" viewBox="0 0 760 470" role="img" aria-label="Agent 交互能力图">
+        <defs>
+          <marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+          <marker id="m3r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker>
+          <marker id="m3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A4EC9"/></marker>
+        </defs>
+        <!-- top: inference -->
+        <rect x="280" y="14" width="200" height="44" rx="10" fill="none" stroke="#3A4EC9" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <text x="380" y="32" text-anchor="middle" style="fill:#141413;font-weight:600">模型推理（VM 外，推断）</text>
+        <text x="380" y="48" class="tiny" text-anchor="middle" style="fill:#3D3D3A">model.get/set · generation · 子代理人设</text>
+        <path class="ln-b" d="M380,60 L380,86" marker-end="url(#m3b)"/>
+        <!-- center daemon -->
+        <rect class="box-ok" x="250" y="90" width="260" height="196" rx="12"/>
+        <text x="380" y="112" text-anchor="middle" style="fill:#141413;font-weight:600">daemon · agent 运行时</text>
+        <line x1="266" y1="122" x2="494" y2="122" stroke="#D1CFC5"/>
+        <text x="380" y="140" class="tiny" text-anchor="middle" style="fill:#3D3D3A">会话：主聊 · 线程 · 侧聊 · 目标线程</text>
+        <text x="380" y="156" class="tiny" text-anchor="middle" style="fill:#3D3D3A">轮次：delta.* 事件流，lane main/subagent</text>
+        <text x="380" y="172" class="tiny" text-anchor="middle" style="fill:#3D3D3A">工具路由 → 服务端 / 节点 / VM 浏览器</text>
+        <text x="380" y="188" class="tiny" text-anchor="middle" style="fill:#3D3D3A">HITL 门控：审批卡、持久授权</text>
+        <text x="380" y="204" class="tiny" text-anchor="middle" style="fill:#3D3D3A">compaction · checkpoint · 记忆写入</text>
+        <text x="380" y="220" class="tiny" text-anchor="middle" style="fill:#3D3D3A">调度：cron 任务 · goals 建议 · feed 版次</text>
+        <text x="380" y="236" class="tiny" text-anchor="middle" style="fill:#3D3D3A">能力注册：client / nodes 的 device_commands</text>
+        <text x="380" y="252" class="tiny" text-anchor="middle" style="fill:#3D3D3A">多人：peers 收件箱 · shared agents 作用域</text>
+        <text x="380" y="272" class="mono" text-anchor="middle" style="fill:#87867F">218 条路由 · 5 个服务</text>
+        <!-- left: inputs -->
+        <rect class="box-d" x="14" y="90" width="196" height="40" rx="8"/><text x="112" y="108" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">用户消息</text><text x="112" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">chat.send（web / 手机 / embed）</text>
+        <rect class="box-d" x="14" y="140" width="196" height="40" rx="8"/><text x="112" y="158" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">定时任务</text><text x="112" y="172" class="tiny" text-anchor="middle" style="fill:#3D3D3A">cron · tasks.run · owner_kind=cron</text>
+        <rect class="box-d" x="14" y="190" width="196" height="40" rx="8"/><text x="112" y="208" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">IM 渠道与 peers</text><text x="112" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">WhatsApp / Messenger · peers.inbox</text>
+        <rect class="box-d" x="14" y="240" width="196" height="40" rx="8"/><text x="112" y="258" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">语音与听写</text><text x="112" y="272" class="tiny" text-anchor="middle" style="fill:#3D3D3A">rsys 通话 · Voyager ASR</text>
+        <path class="ln" d="M212,110 L246,130" marker-end="url(#m3)"/><path class="ln" d="M212,160 L246,160" marker-end="url(#m3)"/><path class="ln" d="M212,210 L246,200" marker-end="url(#m3)"/><path class="ln" d="M212,260 L246,240" marker-end="url(#m3)"/>
+        <!-- right: tool backends & external -->
+        <rect class="box" x="550" y="90" width="196" height="40" rx="8"/><text x="648" y="108" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">服务端工具（VM 内）</text><text x="648" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">exec · web_fetch · imagine · zeitgeist</text>
+        <rect class="box-x" x="550" y="140" width="196" height="40" rx="8"/><text x="648" y="158" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">本机节点（Mac / web）</text><text x="648" y="172" class="tiny" text-anchor="middle" style="fill:#3D3D3A">nodes.invoke → 60+ HatchTools</text>
+        <rect class="box" x="550" y="190" width="196" height="40" rx="8"/><text x="648" y="208" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">VM 浏览器任务</text><text x="648" y="222" class="tiny" text-anchor="middle" style="fill:#3D3D3A">browser.lease · takeover · 流附着</text>
+        <rect class="box" x="550" y="240" width="196" height="40" rx="8"/><text x="648" y="258" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">连接器 / 凭据</text><text x="648" y="272" class="tiny" text-anchor="middle" style="fill:#3D3D3A">authd：OAuth · credentials.* · 1Password</text>
+        <path class="ln" d="M512,110 L546,110" marker-end="url(#m3)"/><path class="ln-d" d="M512,160 L546,160" marker-end="url(#m3r)"/><path class="ln" d="M512,210 L546,210" marker-end="url(#m3)"/><path class="ln" d="M512,260 L546,260" marker-end="url(#m3)"/>
+        <!-- sentinel gate on the right -->
+        <rect class="box-x" x="550" y="296" width="196" height="34" rx="8"/><text x="648" y="317" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">sentinel 出网审批 → 互联网 / SaaS</text>
+        <path class="ln" d="M648,232 L648,292" marker-end="url(#m3)"/><path class="ln" d="M600,132 L600,292" marker-end="url(#m3)"/>
+        <!-- bottom: persistence -->
+        <rect class="box" x="14" y="356" width="732" height="80" rx="10"/>
+        <text x="30" y="376" style="fill:#141413;font-weight:600">持久化（VM 文件系统，fs.* / library / memory / git）</text>
+        <text x="30" y="394" class="tiny" style="fill:#3D3D3A">/home/hatch/workspace/{your_files, artifacts, podcasts, conversations/{id}/transcript} · uploads/ · /MEMORY.md · /media/raw/</text>
+        <text x="30" y="410" class="tiny" style="fill:#3D3D3A">资料库 8 分区 = fs.library 视图 · Spaces 由 VM 内进程响应 /spaces/cvm/{slug} · fs.subscribe 实时推送 · 机密 VM 下为 LUKS 加密盘（PIN 解锁）</text>
+        <text x="30" y="426" class="tiny" style="fill:#3D3D3A">同步进来的本机数据副本：Calendar · Contacts · Email · iMessage · Notes · Reminders（Endo*SyncSource）</text>
+        <path class="ln" d="M380,288 L380,352" marker-end="url(#m3)"/><path class="ln" d="M396,352 L396,288" marker-end="url(#m3)"/>
+        <text x="14" y="458" class="tiny" style="fill:#87867F">赤色虚线 = VM 反向调用本机（经节点通道、受 HITL 门控）；蓝点线 = 推断。daemon 右侧四类后端中只有"本机节点"在用户设备上执行，其余在 VM 内。</text>
+      </svg>
+      <figcaption><b>agent 的"能力"在拓扑上是四个出口加一个入口</b>：四个出口（服务端工具、本机节点、VM 浏览器、连接器）决定它能做什么，一个入口（sentinel）决定它能联系谁；持久化层让这些行为可回看、可搜索、可共享。</figcaption>
+    </figure>
+    <div class="g3">
+      <div class="card"><h3>能力出口 ① 服务端工具</h3><div class="tag">tool.exec · web_fetch · imagine · zeitgeist</div><p>在 VM 内执行，出网经 sentinel。审批图标把 <code>tool.exec</code> 标为"地球"，推断为带网络的执行环境；"Hatch folder" 之外运行程序需额外授权。</p></div>
+      <div class="card"><h3>能力出口 ② 本机节点</h3><div class="tag">nodes.sync → invoke → invoke_ack / result</div><p>唯一在用户设备上执行的出口。电脑控制在后台虚拟显示器进行，文件、邮件、信息、日历等工具各有读/写/动作三级授权；web 客户端自己也是节点，接受 <code>ui.navigate.*</code> 等 27 个 UI 命令。</p></div>
+      <div class="card"><h3>能力出口 ③④ 浏览器与连接器</h3><div class="tag">browser_task.* · authd（credentials.*）· vault（LUKS）</div><p>VM 内租用浏览器执行网页任务，用户可随时 takeover；连接器 OAuth 回调与凭据库都在 authd（<code>/v1/credentials/*</code>），<code>credentials.capture</code> 可从浏览器登录中捕获凭据；vault 负责 LUKS 加密卷，是凭据的落盘处（推断）。</p></div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>能力图说明 agent 能做什么。</b><span class="to">↓　把镜头拉近到一条消息：它从 Mac 到 VM 要穿过多少层、每层在哪里被打开。</span></div>
+
+  <section id="sec-layers">
+    <h2><span class="n">04</span>一条消息穿过的 12 层</h2>
+    <p class="sub">以 web 聊天层发出的一次 <code>chat.send</code> 为例。客户端打 7 层包，网络上过 3 跳，VM 侧对称拆包再分发。横条表示"这一层在哪段路径上存在"，断开处就是它被终止并重建的地方。</p>
+    <figure>
+      <div class="fig-h">图 4 · 封装层次与路径<span>横轴：路径位置 · 纵轴：封装层（上为应用、下为传输）</span></div>
+      <svg class="rf" viewBox="0 0 1040 700" role="img" aria-label="封装层次与路径">
+        <defs>
+          <marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+        </defs>
+        <!-- column headers / hop positions -->
+        <g>
+          <text x="130" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">Mac 应用</text>
+          <text x="130" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">web 聊天层</text>
+          <text x="330" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">L4 负载均衡</text>
+          <text x="330" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">GeoDNS VIP · Katran（推断）</text>
+          <text x="520" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">L7 边缘代理</text>
+          <text x="520" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">Proxygen · ingress_rev_proxy</text>
+          <text x="700" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">Meta 骨干</text>
+          <text x="700" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">到 VM 所在数据中心</text>
+          <text x="870" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">VM 网关</text>
+          <text x="870" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">Noise 在此终止</text>
+          <text x="990" y="30" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:12.5px">daemon</text>
+          <text x="990" y="46" class="tiny" text-anchor="middle" style="fill:#87867F">agent 运行时</text>
+          <line x1="130" y1="56" x2="130" y2="600" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+          <line x1="330" y1="56" x2="330" y2="600" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+          <line x1="520" y1="56" x2="520" y2="600" stroke="#D97757" stroke-width="1.5" stroke-dasharray="3 4"/>
+          <line x1="700" y1="56" x2="700" y2="600" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+          <line x1="870" y1="56" x2="870" y2="600" stroke="#788C5D" stroke-width="1.5" stroke-dasharray="3 4"/>
+          <line x1="990" y1="56" x2="990" y2="600" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+        </g>
+        <!-- band labels on left -->
+        <!-- L1 application -->
+        <rect class="box-ok" x="130" y="76" width="860" height="44" rx="7"/>
+        <text x="146" y="94" style="fill:#141413;font-weight:600;font-size:11.5px">① 应用 RPC</text>
+        <text x="146" y="110" class="tiny" style="fill:#3D3D3A">chat.send → verb POST · path · headers · JSON body（route 表解析）</text>
+        <text x="975" y="101" class="tiny" text-anchor="end" style="fill:#788C5D;font-weight:600">只有 daemon 解析</text>
+        <!-- L2 service frame -->
+        <rect class="box-ok" x="130" y="130" width="740" height="44" rx="7"/>
+        <text x="146" y="148" style="fill:#141413;font-weight:600;font-size:11.5px">② 服务信封</text>
+        <text x="146" y="164" class="tiny" style="fill:#3D3D3A">protobuf hatch.noise.ServiceRequest{service=daemon} ⊃ ServiceFrame{stream_id, request | response | body_chunk | reset}</text>
+        <text x="855" y="155" class="tiny" text-anchor="end" style="fill:#788C5D;font-weight:600">VM 网关按 service 分发</text>
+        <!-- L3 Noise -->
+        <rect x="130" y="184" width="740" height="44" rx="7" fill="rgba(120,140,93,0.28)" stroke="#788C5D" stroke-width="2"/>
+        <text x="146" y="202" style="fill:#141413;font-weight:600;font-size:11.5px">③ Noise 加密</text>
+        <text x="146" y="218" class="tiny" style="fill:#3D3D3A">AES-GCM · nonce 递增 · +16 B 标签 · 密钥只存在于 Mac 与 VM（机密 VM：SEV-SNP 内存）</text>
+        <text x="855" y="209" class="tiny" text-anchor="end" style="fill:#788C5D;font-weight:600">全链路唯一能打开它的地方</text>
+        <!-- L4 transport frame -->
+        <rect class="box-ok" x="130" y="238" width="740" height="44" rx="7"/>
+        <text x="146" y="256" style="fill:#141413;font-weight:600;font-size:11.5px">④ 传输分块</text>
+        <text x="146" y="272" class="tiny" style="fill:#3D3D3A">protobuf ingress_rev_proxy.NoiseTransportFrame{chunk_id, chunk_index, total_chunks, payload}　≤ 65 489 B/块 · ≤ 256 块</text>
+        <text x="855" y="256" class="tiny" text-anchor="end" style="fill:#D97757;font-weight:600">边缘读分块元数据，密文原样转发</text>
+        <!-- L5 WebSocket -->
+        <rect class="box-x" x="130" y="292" width="390" height="44" rx="7"/>
+        <text x="146" y="310" style="fill:#141413;font-weight:600;font-size:11.5px">⑤ WebSocket 帧</text>
+        <text x="146" y="326" class="tiny" style="fill:#3D3D3A">RFC 6455 二进制帧 · 客户端掩码 · 2–14 B 帧头</text>
+        <rect x="520" y="292" width="350" height="44" rx="7" fill="none" stroke="#3A4EC9" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="695" y="310" class="tiny" text-anchor="middle" style="fill:#3D3D3A">边缘 → VM：内部传输（推断，可能仍是 WebSocket 或专用流）</text>
+        <text x="695" y="326" class="tiny" text-anchor="middle" style="fill:#87867F">原生节点侧可为 Tigon HTTP 双工流</text>
+        <!-- L6 TLS -->
+        <rect class="box-x" x="130" y="346" width="390" height="44" rx="7"/>
+        <text x="146" y="364" style="fill:#141413;font-weight:600;font-size:11.5px">⑥ TLS</text>
+        <text x="146" y="380" class="tiny" style="fill:#3D3D3A">到 hatch.metaaivm.com（CNAME edge-metaclaw-http.c10r.facebook.com）· 在边缘终止</text>
+        <rect x="520" y="346" width="350" height="44" rx="7" fill="none" stroke="#3A4EC9" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="695" y="364" class="tiny" text-anchor="middle" style="fill:#3D3D3A">边缘 → VM：内部 mTLS / 隧道（推断）</text>
+        <text x="695" y="380" class="tiny" text-anchor="middle" style="fill:#87867F">无论如何只能看到 ③ 的密文</text>
+        <!-- L7 TCP/IP -->
+        <rect class="box-d" x="130" y="400" width="200" height="44" rx="7"/>
+        <text x="146" y="418" style="fill:#141413;font-weight:600;font-size:11.5px">⑦ TCP / IP</text>
+        <text x="146" y="434" class="tiny" style="fill:#3D3D3A">Mac → VIP</text>
+        <rect class="box-d" x="330" y="400" width="190" height="44" rx="7"/>
+        <text x="425" y="418" class="tiny" text-anchor="middle" style="fill:#3D3D3A">VIP → 边缘机</text>
+        <text x="425" y="434" class="tiny" text-anchor="middle" style="fill:#87867F">五元组一致性哈希，不改字节</text>
+        <rect class="box-d" x="520" y="400" width="350" height="44" rx="7"/>
+        <text x="695" y="418" class="tiny" text-anchor="middle" style="fill:#3D3D3A">边缘机 → VM 宿主 → 虚拟机网卡</text>
+        <text x="695" y="434" class="tiny" text-anchor="middle" style="fill:#87867F">新建的 TCP 连接</text>
+        <!-- markers: terminated at edge -->
+        <text x="520" y="468" class="lab" text-anchor="middle" style="fill:#D97757;font-weight:600">⑤⑥⑦ 在边缘终止并重建</text>
+        <text x="915" y="468" class="lab" text-anchor="end" style="fill:#788C5D;font-weight:600">②③④ 在 VM 网关打开</text>
+        <text x="1030" y="468" class="lab" text-anchor="end" style="fill:#788C5D;font-weight:600">① 在 daemon 打开</text>
+        <!-- hop numbering row -->
+        <line x1="130" y1="500" x2="990" y2="500" stroke="#87867F" stroke-width="1.5" marker-end="url(#m4)"/>
+        <circle cx="130" cy="500" r="9" fill="#87867F"/><text x="130" y="504" class="num" text-anchor="middle">7</text>
+        <circle cx="330" cy="500" r="9" fill="#87867F"/><text x="330" y="504" class="num" text-anchor="middle">8</text>
+        <circle cx="520" cy="500" r="9" fill="#D97757"/><text x="520" y="504" class="num" text-anchor="middle">9</text>
+        <circle cx="700" cy="500" r="9" fill="#87867F"/><text x="700" y="504" class="num" text-anchor="middle">10</text>
+        <circle cx="870" cy="500" r="9" fill="#788C5D"/><text x="870" y="504" class="num" text-anchor="middle">11</text>
+        <circle cx="990" cy="500" r="9" fill="#788C5D"/><text x="990" y="504" class="num" text-anchor="middle">12</text>
+        <text x="130" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">封装 ①–⑦ 完成</text>
+        <text x="330" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">第 8 层：L4 分发</text>
+        <text x="520" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">第 9 层：校验 token · 查 vm_id</text>
+        <text x="700" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">第 10 层：骨干转发</text>
+        <text x="870" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">第 11 层：重组 · 解密 · 分发</text>
+        <text x="990" y="524" class="tiny" text-anchor="middle" style="fill:#87867F">第 12 层：处理</text>
+        <!-- legend -->
+        <line x1="20" y1="556" x2="1020" y2="556" stroke="#F0EEE6" stroke-width="1.5"/>
+        <text x="20" y="578" class="lab" style="fill:#3D3D3A">读法：横条越长，这一层"活"得越远。①②③④ 从 Mac 一路到 VM 不被打开；⑤⑥⑦ 只活到边缘。回程完全对称：daemon → 网关封 ②③④ → 边缘重新套 ⑤⑥⑦ → Mac。</text>
+        <text x="20" y="598" class="lab" style="fill:#3D3D3A">一条 WSS 连接内靠 stream_id 复用多个 RPC；流式回复 = 一个 response 帧 + 多个 body_chunk；大对象靠 ④ 分块（16 MiB 预算、60 s TTL、最多 16 个并行组装）。</text>
+        <text x="20" y="624" class="tiny" style="fill:#87867F">绿 = 端到端穿过 · 橙 = 边缘终止 · 蓝虚框 = 边缘到 VM 一段的传输方式属推断。原生节点通道（node.invoke）复用 ①–④，⑤⑥ 可换成 Tigon HTTP 双工流。</text>
+        <text x="20" y="644" class="tiny" style="fill:#87867F">每层开销：② 几十字节 · ③ +16 B · ④ 每块 15–20 B · ⑤ 2–14 B · ⑥ 约 22 B + 标签。延迟大头在第 9 跳（TLS 终止、vm_id 查表）与第 10 跳，均为建链时的一次性成本。</text>
+        <text x="20" y="676" class="tiny" style="fill:#87867F">机密 VM 不多一层封装，而是多一层语义：第 11 层所在内存受 SEV-SNP 保护，Noise 密钥只在那里，连 VM 宿主机也打不开 ③。</text>
+      </svg>
+      <figcaption><b>只有三层在中途被打开</b>：TLS、WebSocket、传输分块的外壳在边缘终止并重建；服务信封、Noise 密文、应用 JSON 三层从 Mac 到 VM 一路不变。这就是"双层加密"的实际含义，也是边缘和骨干看不到对话内容的原因。</figcaption>
+    </figure>
+
+    <div class="g2">
+      <div class="card">
+        <h3>单入口为什么撑得住</h3><div class="tag">DNS 实测 · 2026-11-01</div>
+        <p><code>hatch.metaaivm.com</code> 是 CNAME 到 <code>edge-metaclaw-http.c10r.facebook.com</code>，落在 Facebook 全球边缘的统一命名空间 <code>c10r.facebook.com</code> 里；Messenger / WhatsApp 的长连接入口 <code>edge-mqtt.facebook.com</code> 同样是 <code>mqtt.c10r.facebook.com</code>。AAAA 记录 TTL 24 秒，是 GeoDNS 流量调度的典型特征。</p>
+        <p>一个域名不等于一台服务器：DNS 层按地区分到不同 PoP 的 VIP，VIP 后 L4 负载均衡再分到成百上千台边缘机，每台维持几十万到上百万条空闲 WebSocket。入口本身无状态，只校验 token、查 vm_id、搬运密文，CPU 开销接近零，可以任意加机器；真正有状态的是按用户切分的 VM，天然水平扩展。</p>
+        <p><span class="warn">推断</span>：Katran / Proxygen 的分层来自 Facebook 公开架构，针对此服务没有直接证据；CNAME、TTL、401 响应头为实测。</p>
+      </div>
+      <div class="card">
+        <h3>真正的扩展压力在哪</h3><div class="tag">不在这个地址上</div>
+        <ul class="rkv">
+          <li><b>vm_id → 主机 的查找服务</b>：每条新连接都要查一次，要低延迟、高可用。</li>
+          <li><b>连接数</b>：每台 Mac 至少两条长连接（web 聊天层 + 原生节点）加心跳；保活流量是边缘要算的成本。</li>
+          <li><b>每用户一台 VM</b>：这才是最贵的部分，入口相比之下很轻。</li>
+          <li><b>端口不是限制</b>：65535 的上限针对"同一客户端 IP 到同一服务端 IP:端口"，服务端可接受无限多不同客户端。</li>
+          <li><b>单域名的工程收益</b>：一张证书、一条防火墙白名单、客户端一个常量；VM 身份放在查询参数和 Noise 里，不暴露在 DNS 上。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>十二层说清了"怎么走"。</b><span class="to">↓　这条连接是一直在的吗？什么时候断，怎么回来？</span></div>
+
+  <section id="sec-lifecycle">
+    <h2><span class="n">05</span>长连接的生命周期</h2>
+    <p class="sub">设计上是"尽量一直保持"：10 秒心跳、秒级重连、后台不放手。两个例外决定了它不是永远在线：<strong>VM 会被挂起</strong>，以及<strong>没人看的时候不主动唤醒</strong>。</p>
+    <figure>
+      <div class="fig-h">图 5 · 连接状态机<span>web 聊天层为主，节点通道同理</span></div>
+      <svg class="rf" viewBox="0 0 1040 420" role="img" aria-label="连接状态机">
+        <defs>
+          <marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+          <marker id="m5o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#788C5D"/></marker>
+          <marker id="m5r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker>
+        </defs>
+        <!-- states -->
+        <rect class="box-d" x="20" y="40" width="190" height="90" rx="12"/>
+        <text x="115" y="64" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">建链</text>
+        <text x="115" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">取 token（10 s）· 取 notary（8 s）</text>
+        <text x="115" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">WSS 打开 · Noise 握手（10 s）</text>
+        <text x="115" y="116" class="tiny" text-anchor="middle" style="fill:#3D3D3A">client.register_capabilities</text>
+        <rect class="box-ok" x="300" y="40" width="220" height="90" rx="12"/>
+        <text x="410" y="64" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">已连接（常态）</text>
+        <text x="410" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">心跳每 10 s，探测超时 10 s</text>
+        <text x="410" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">stream 空闲超时 5 min（不影响连接）</text>
+        <text x="410" y="116" class="tiny" text-anchor="middle" style="fill:#3D3D3A">后台：App Nap 豁免 · 节点通道保温</text>
+        <rect class="box-x" x="610" y="40" width="200" height="90" rx="12"/>
+        <text x="710" y="64" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">断开</text>
+        <text x="710" y="84" class="tiny" text-anchor="middle" style="fill:#3D3D3A">4002 心跳超时 · 4001 客户端重连</text>
+        <text x="710" y="100" class="tiny" text-anchor="middle" style="fill:#3D3D3A">1012 / 1013 服务端通知</text>
+        <text x="710" y="116" class="tiny" text-anchor="middle" style="fill:#3D3D3A">网络离线 · VM 正在挂起</text>
+        <rect class="box" x="300" y="190" width="220" height="90" rx="12"/>
+        <text x="410" y="214" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">重连退避</text>
+        <text x="410" y="234" class="tiny" text-anchor="middle" style="fill:#3D3D3A">0.5 → 1 → 2 → 5 → 10 s，单次上限 15 s</text>
+        <text x="410" y="250" class="tiny" text-anchor="middle" style="fill:#3D3D3A">30 s 标记慢重连 · 耗尽后 60 s 再武装</text>
+        <text x="410" y="266" class="tiny" text-anchor="middle" style="fill:#3D3D3A">页面 resume / 网络恢复 立即重试</text>
+        <rect class="box" x="610" y="190" width="200" height="90" rx="12"/>
+        <text x="710" y="214" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">VM 挂起</text>
+        <text x="710" y="234" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"Pinned VM is suspending"</text>
+        <text x="710" y="250" class="tiny" text-anchor="middle" style="fill:#3D3D3A">空闲阈值静态不可见（推断：按空闲）</text>
+        <text x="710" y="266" class="tiny" text-anchor="middle" style="fill:#3D3D3A">连接结束，等待唤醒</text>
+        <rect class="box" x="20" y="190" width="190" height="90" rx="12"/>
+        <text x="115" y="214" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">唤醒与预热</text>
+        <text x="115" y="234" class="tiny" text-anchor="middle" style="fill:#3D3D3A">POST /api/hatch/vm/wake（10 s）</text>
+        <text x="115" y="250" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"Warming up"，上限 5 min</text>
+        <text x="115" y="266" class="tiny" text-anchor="middle" style="fill:#3D3D3A">仅当界面被看着才发起</text>
+        <!-- transitions -->
+        <path class="ln-ok" d="M212,85 L296,85" marker-end="url(#m5o)"/><text x="254" y="78" class="tiny" text-anchor="middle" style="fill:#788C5D">握手成功</text>
+        <path class="ln-r ln-d" d="M522,85 L606,85" marker-end="url(#m5r)"/><text x="564" y="78" class="tiny" text-anchor="middle" style="fill:#B04A3F">任一原因</text>
+        <path class="ln" d="M660,132 L470,186" marker-end="url(#m5)"/><text x="590" y="150" class="tiny" text-anchor="middle" style="fill:#3D3D3A">可重试</text>
+        <path class="ln" d="M760,132 L740,186" marker-end="url(#m5)"/><text x="790" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">VM 不可达</text>
+        <path class="ln" d="M340,188 L180,132" marker-end="url(#m5)"/><text x="248" y="150" class="tiny" text-anchor="middle" style="fill:#3D3D3A">到点重试</text>
+        <path class="ln" d="M710,282 L710,300 L115,300 L115,284" marker-end="url(#m5)"/><text x="411" y="312" class="tiny" text-anchor="middle" style="fill:#3D3D3A">界面可见且用户在场 → 唤醒</text>
+        <path class="ln" d="M115,188 L115,134" marker-end="url(#m5)"/><text x="150" y="164" class="tiny" text-anchor="start" style="fill:#3D3D3A">VM 就绪后建链</text>
+        <!-- hold note -->
+        <rect x="20" y="320" width="790" height="34" rx="8" fill="rgba(217,119,87,0.08)" stroke="#D97757" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="415" y="341" class="lab" text-anchor="middle" style="fill:#B04A3F">holdUnwatchedVmWakes：窗口不可见或用户不在场时，不为它唤醒 VM；连接保持断开，直到有人回来看</text>
+        <!-- right-side native column -->
+        <rect class="box-d" x="840" y="40" width="180" height="240" rx="12"/>
+        <text x="930" y="64" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:13px">节点通道（原生）</text>
+        <text x="930" y="88" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"keep the node command</text>
+        <text x="930" y="102" class="tiny" text-anchor="middle" style="fill:#3D3D3A">channel warm in the background"</text>
+        <text x="930" y="124" class="tiny" text-anchor="middle" style="fill:#3D3D3A">App Nap 豁免</text>
+        <text x="930" y="140" class="tiny" text-anchor="middle" style="fill:#3D3D3A">BackgroundActivityLease 断言</text>
+        <text x="930" y="162" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/nodes/heartbeat 定期上报</text>
+        <text x="930" y="178" class="tiny" text-anchor="middle" style="fill:#3D3D3A">keepalive 确认超时 → 重连</text>
+        <text x="930" y="200" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"reconnect resumes when</text>
+        <text x="930" y="214" class="tiny" text-anchor="middle" style="fill:#3D3D3A">admission clears"</text>
+        <text x="930" y="240" class="tiny" text-anchor="middle" style="fill:#87867F">为 cron 任务和后台工作</text>
+        <text x="930" y="256" class="tiny" text-anchor="middle" style="fill:#87867F">随时能触达 Mac 而存在</text>
+        <line x1="20" y1="376" x2="1020" y2="376" stroke="#F0EEE6" stroke-width="1.5"/>
+        <text x="20" y="398" class="lab" style="fill:#3D3D3A">结论：只要 VM 在跑，两条 Noise 长连接就在，断了几秒内回来，app 退后台也不放手；真正的变量是 VM 的运行状态，而"后台持续工作"的隐含前提是有定时任务等触发源让 VM 保持醒着。</text>
+      </svg>
+      <figcaption><b>"一直连着"对 Mac 侧成立，对 VM 侧有条件</b>：客户端的所有机制都在维持连接，但 VM 可以被挂起，且客户端只在有人看界面时才去唤醒它。</figcaption>
+    </figure>
+    <div class="card">
+      <table>
+        <tr><th style="width:26%">参数 / 行为</th><th style="width:18%">值</th><th>来源与含义</th></tr>
+        <tr><td>心跳间隔</td><td>10 s</td><td><code>KEEPALIVE_INTERVAL_MS</code>；连上即启动心跳循环（web 聊天层）。</td></tr>
+        <tr><td>心跳超时</td><td>10 s → 关闭码 4002</td><td><code>HEARTBEAT_TIMEOUT_MS</code>、<code>HEARTBEAT_TIMEOUT_CLOSE_CODE</code>；探测无应答主动关闭再重连。</td></tr>
+        <tr><td>重连退避</td><td>0.5 / 1 / 2 / 5 / 10 s，上限 15 s</td><td><code>RECONNECT_DELAYS_MS</code>、<code>RECONNECT_WAIT_MAX_MS</code>；30 s 标记慢重连；耗尽后 60 s 再武装。</td></tr>
+        <tr><td>服务端通知</td><td>关闭码 1012 / 1013</td><td>"service notice"，视为 VM 重启或稍后再试，触发重连而非报错。</td></tr>
+        <tr><td>stream 空闲</td><td>5 min</td><td><code>STREAM_IDLE_TIMEOUT_MS</code>；作用于连接内单条 stream，不断连接。</td></tr>
+        <tr><td>后台保持（原生）</td><td>App Nap 豁免 + 后台活动断言</td><td>"Began App Nap exemption for gateway keepalive"、<code>BackgroundActivityLease</code>；节点通道在 app 退后台后仍保温。</td></tr>
+        <tr><td>VM 挂起</td><td>可重试的断开</td><td>"Pinned VM is suspending; the connection is retryable"、"not reachable (suspended, deleted, or unmapped); retry with a force-wakeup credential fetch"。</td></tr>
+        <tr><td>VM 唤醒</td><td><code>POST /api/hatch/vm/wake</code>，10 s</td><td>参数 vm_id / retry_count / connect_attempt_id；触发类型 foreground / recovery / late；界面 "Warming up"，预热等待上限 5 min。</td></tr>
+        <tr><td>无人看不唤醒</td><td><code>holdUnwatchedVmWakes</code></td><td>窗口不可见或用户不在场时不发起唤醒；可见性由 <code>isHatchSurfaceWatched</code> 判定（可见 + 焦点 / 在场）。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>连接层面是典型的"永远在线"客户端设计；产品层面把"VM 是否醒着"当成成本开关，用"有人看"和"有任务"两个条件来决定要不要维持。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>连接的生命周期清楚了。</b><span class="to">↓　连接里跑的到底是什么：发一条消息、收一条回复、答一张审批卡，各走什么协议？</span></div>
+
+  <section id="sec-proto">
+    <h2><span class="n">06</span>消息级协议：RPC、订阅流与事件信封</h2>
+    <p class="sub">答案一句话：<strong>一条 WebSocket，一层 Noise，里面是"HTTP 形状的 RPC"加"NDJSON 事件流"</strong>。没有独立的 JSON-RPC 或 gRPC；路由表里甚至没有 <code>chat.send</code>，发消息就是打开一条名叫 <code>chat.stream</code> 的流。</p>
+    <figure>
+      <div class="fig-h">图 6 · 四种消息各走哪条路<span>可左右拖动 · 同一条 Noise 连接，按 stream_id 复用</span></div>
+      <div class="scroll"><svg class="rf wide" viewBox="0 0 1400 868" role="img" aria-label="消息级协议时序">
+        <defs>
+          <marker id="p6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+          <marker id="p6o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#788C5D"/></marker>
+          <marker id="p6r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker>
+        </defs>
+        <rect class="box-d" x="40" y="14" width="260" height="40" rx="10"/><text x="170" y="39" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:14px">web 聊天层（客户端）</text>
+        <rect class="box-ok" x="1100" y="14" width="260" height="40" rx="10"/><text x="1230" y="39" text-anchor="middle" style="fill:#141413;font-weight:600;font-size:14px">VM：daemon / sentinel</text>
+        <line x1="170" y1="54" x2="170" y2="806" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+        <line x1="1230" y1="54" x2="1230" y2="806" stroke="#D1CFC5" stroke-dasharray="3 4"/>
+        <rect x="190" y="70" width="1020" height="178" rx="10" fill="rgba(120,140,93,0.06)" stroke="#788C5D" stroke-width="1"/><text x="204" y="92" style="fill:#141413;font-weight:600;font-size:13.5px">A · 发消息并收这一轮的回复：一条 subscription 流</text><text x="700" y="116" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">request 帧：POST /chat/stream　body {text, attachments, reply_to_message_id, session_id, stream_lane…}　服务 daemon，stream_id = n</text><path class="ln-ok" d="M176,124 L1224,124" marker-end="url(#p6o)"/><text x="700" y="150" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">response 帧（ack）：status 200，body {ok:true, result}　← 此时消息从 deliveryPhase awaiting_ack 变为已送达</text><path class="ln-ok" d="M1224,158 L176,158" marker-end="url(#p6o)"/><text x="700" y="184" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">body_chunk 帧 ×N：NDJSON，每行一个事件信封 {type:"event", event:"delta.message_start", payload, seq, ts_ms}</text><path class="ln-ok" d="M1224,192 L176,192" marker-end="url(#p6o)"/><path class="ln-ok" d="M1224,199 L176,199" marker-end="url(#p6o)"/><path class="ln-ok" d="M1224,206 L176,206" marker-end="url(#p6o)"/><text x="700" y="226" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">… delta.text_append … delta.tool_start / tool_done … delta.presentation … delta.message_done … delta.turn_done　（同一 stream_id，直到 end_body）</text><rect x="190" y="264" width="1020" height="144" rx="10" fill="rgba(120,140,93,0.06)" stroke="#788C5D" stroke-width="1"/><text x="204" y="286" style="fill:#141413;font-weight:600;font-size:13.5px">B · 服务端主动推送（后台工作、定时任务、其它设备的发言）：长期订阅流</text><text x="700" y="310" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">request 帧：POST /chat/subscribe　连上就开，ack 超时 30 s，重连后自动重订；另有 activity / tasks / fs / computer / sessions 等 .subscribe</text><path class="ln-ok" d="M176,318 L1224,318" marker-end="url(#p6o)"/><text x="700" y="344" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">body_chunk：{event:"message.assistant", payload:{…, isBackground, stream_lane, agent_id, parent_agent_id, visibility, channel_context}}</text><path class="ln-ok" d="M1224,352 L176,352" marker-end="url(#p6o)"/><path class="ln-ok" d="M1224,359 L176,359" marker-end="url(#p6o)"/><text x="700" y="386" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">{event:"sessions.updated"} · {event:"tasks.updated"} · {event:"fs.updated"} · {event:"node.connected"} · {event:"approvals.snapshot"} · {event:"client.invoke"}</text><rect x="190" y="424" width="1020" height="212" rx="10" fill="rgba(217,119,87,0.07)" stroke="#D97757" stroke-width="1"/><text x="204" y="446" style="fill:#141413;font-weight:600;font-size:13.5px">C · HITL 审批：事件推送到达，单次 RPC 回答（走 sentinel 服务）</text><text x="700" y="470" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">订阅流事件 {event:"approvals.snapshot", payload:{pending:[{approval_id, approval_type, decision_options, message_revision…}], recent:[…]}}</text><path class="ln-d" d="M1224,478 L176,478" marker-end="url(#p6r)"/><text x="700" y="504" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">同时聊天流里出现带 approval 的消息（approval_card，status pending_user_confirmation / background_pending_user_confirmation）；composer 锁定</text><path class="ln-d" d="M1224,512 L176,512" marker-end="url(#p6r)"/><text x="700" y="538" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">request 帧：POST /approvals/{approval_id}/decide（sentinel）　body {approval_id, decision, always_scope?, expected_message_revision, notification_channel:"ui"}</text><path class="ln" d="M176,546 L1224,546" marker-end="url(#p6)"/><text x="700" y="572" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">response {approval:{…}}；随后新的 approvals.snapshot 事件推下来，卡片消失，被挂起的轮次继续（"Resumed after approval"）</text><path class="ln" d="M1224,580 L176,580" marker-end="url(#p6)"/><text x="700" y="614" text-anchor="middle" style="fill:#87867F;font-size:12px">改写待发内容：POST /approvals/{id}/edit-message；出网类审批同一套接口；本机工具的审批由原生节点处理，但快照共享</text><rect x="190" y="652" width="1020" height="110" rx="10" fill="rgba(217,119,87,0.07)" stroke="#D97757" stroke-width="1"/><text x="204" y="674" style="fill:#141413;font-weight:600;font-size:13.5px">D · 服务端向客户端下发命令（web 也是一个"节点"）</text><text x="700" y="698" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">订阅流事件 {event:"client.invoke", payload:{invoke_id, command_id:"ui.navigate.chat.session", params, seq}}　→ 按 command_id 查已注册的 handler</text><path class="ln-d" d="M1224,706 L176,706" marker-end="url(#p6r)"/><text x="700" y="732" text-anchor="middle" style="fill:#3D3D3A;font-size:12px">request 帧：POST /client/invoke-result　body {invoke_id, ok:true} 或 {invoke_id, ok:false, error:{code, message}}　原生节点：nodes.invoke_ack / invoke_result</text><path class="ln" d="M176,740 L1224,740" marker-end="url(#p6)"/>
+        <text x="700" y="792" text-anchor="middle" style="fill:#87867F;font-size:12px">探活：每 10 s 一次单次 RPC　POST /api/ping　body {presence:"active"|"away"}　既是心跳也是在场状态上报；10 s 无应答 → 关闭码 4002 → 重连</text>
+        <line x1="20" y1="818" x2="1380" y2="818" stroke="#F0EEE6" stroke-width="1.5"/>
+        <text x="20" y="844" style="fill:#3D3D3A;font-size:12.5px">绿 = 流式（一个 request 帧换 ack + 多个 body_chunk）· 灰 = 单次 RPC（一个 request 帧换一个 response 帧）· 赤色虚线 = 服务端主动推下来的事件。全部复用同一条 Noise 连接，靠 stream_id 区分。</text>
+      </svg></div>
+      <figcaption><b>只有两种原语</b>：单次 RPC 和订阅流。"发消息"是一次订阅流（<code>chat.stream</code>），"收回复"是它的 body_chunk；"审批"是事件推送加一次 RPC；"服务端命令"是事件推送加一次 RPC。所有事件都是同一种 NDJSON 信封。</figcaption>
+    </figure>
+
+    <div class="g2">
+      <div class="card">
+        <h3>两种原语的线上格式</h3><div class="tag">hatch.noise.ServiceFrame 内</div>
+        <ul class="rkv">
+          <li><b>单次 RPC</b>：<code>request{verb, path, headers, body(JSON), end_body:true}</code> → <code>response{status, headers, body, end_body:true}</code>。body 约定 <code>{ok:true, result}</code>，非 2xx 或 <code>{error}</code> 转为网关错误（内部叫 <code>jarvis_rejection</code>，429 单独识别为限流）。</li>
+          <li><b>订阅流</b>：request 同上但路由标 <code>streamMode: subscription</code>；第一个 response 帧是 ack（<code>{ok:true,result}</code> 或旧式 <code>{type:"res",status:"ok",payload}</code>），之后 <code>body_chunk{data, end_body:false}</code> 持续到来，data 是 NDJSON，每行一个事件信封。</li>
+          <li><b>事件信封</b>：<code>{type:"event", event:"&lt;名字&gt;", payload, seq, ts_ms}</code>。客户端按 (seq, messageId, lane) 合并；历史回放（<code>chat.stream_events</code>、<code>chat.history</code>）返回的行 <code>{event_name, payload, seq, occurred_at_ms}</code> 被转成同一种信封，只是 <code>transport</code> 标为 http 而非 ws。</li>
+          <li><b>限制</b>：订阅单条记录有上限（<code>maxSubscriptionRecordBytes</code>），超限的 activity 流会被重置；流空闲 5 min 超时；<code>*.subscribe</code> 在重连后自动重订，<code>chat.stream</code> 不会（它属于那一轮）。</li>
+          <li><b>取消</b>：<code>reset{code: CANCELLED}</code> 帧，或业务上的 <code>POST /chat/cancel</code>。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>残留的明文协议与它的去向</h3><div class="tag">type: req / res / event</div>
+        <p>代码里仍有一套直接在 WebSocket 上跑 JSON 的协议：<code>{type:"req", id, method, params}</code> → <code>{type:"res", id, status:"ok"|"err", payload|error}</code>，以及 <code>{type:"event", event, payload, seq, ts_ms}</code>。在 Noise 连接上它被显式禁用：发送端日志 "wsSendJson called under Noise, dropping (no plaintext path)"，接收端 "Rejecting plaintext frame on Noise connection"。</p>
+        <p><span class="warn">推断</span>：这是 Noise 之前的网关协议。现在的事件信封格式就是从它继承的，只是被装进了 HTTP-over-Noise 的订阅流里；<code>subscriptionHttpAckResult</code> 同时接受新旧两种 ack 形状也印证了这一点。</p>
+        <p>与之无关的两个 "RPC"：web 包里捆的 vscode-jsonrpc 是给代码编辑器的 LSP 用的；protobuf 运行时用于 Noise 帧和证明包，不用于业务消息体（业务体是 JSON）。</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <table>
+        <tr><th style="width:20%">消息</th><th style="width:16%">原语</th><th style="width:30%">路由 / 事件</th><th>关键字段与行为</th></tr>
+        <tr><td>客户端发消息</td><td>订阅流</td><td><code>POST /chat/stream</code>（daemon）</td><td>body 含 text、attachments（先经 <code>files.upload</code> 上传，"stageBeforePublish"）、reply_to_message_id、session_id、stream_lane；发前先过本地审批门与"用户在场"检查；连接不在时进发件箱 <code>queued_for_connection</code>，重连后安全重试（<code>isSafeOutboxRetry</code>）。</td></tr>
+        <tr><td>收这一轮回复</td><td>同一条流的 body_chunk</td><td><code>delta.*</code> 事件</td><td>message_start → text_append ×N → tool_start/tool_done → placeholder / presentation → compaction_start/done → message_done → turn_done；按 seq 合并，lane 区分 main / subagent。</td></tr>
+        <tr><td>收服务端主动消息</td><td>长期订阅流</td><td><code>POST /chat/subscribe</code> → <code>message.assistant</code> 等</td><td>后台任务、cron、其它设备发出的消息；payload 带 isBackground、agent_id / parent_agent_id、visibility、channel_context；ack 超时 30 s，断线重连后自动重订。</td></tr>
+        <tr><td>HITL 审批到达</td><td>事件</td><td><code>approvals.snapshot</code> + 带 approval 的聊天消息</td><td>快照含 pending / recent 全量，客户端据此刷新审批列表与权限视图；消息状态 pending_user_confirmation 时 composer 锁定（"sending is paused"）。</td></tr>
+        <tr><td>HITL 审批回答</td><td>单次 RPC</td><td><code>POST /approvals/{id}/decide</code>（<b>sentinel</b>）</td><td>{approval_id, decision: allow_once | allow_always | deny | deny_always…, always_scope, expected_message_revision, notification_channel:"ui"}；可先 <code>edit-message</code> 改写待发内容；支持批量决策。</td></tr>
+        <tr><td>服务端下发 UI/设备命令</td><td>事件 + 单次 RPC</td><td><code>client.invoke</code> → <code>POST /client/invoke-result</code></td><td>payload {invoke_id, command_id, params}；无注册 handler 时记录错误；原生节点对应 <code>nodes.invoke_ack</code> / <code>invoke_result</code>，文件结果另走上传。</td></tr>
+        <tr><td>探活 / 在场</td><td>单次 RPC</td><td><code>POST /api/ping</code> {presence}</td><td>每 10 s；presence 取 active / away，由页面可见性与焦点推导；是心跳也是"用户在不在"的上报。</td></tr>
+        <tr><td>其它状态同步</td><td>长期订阅流</td><td><code>activity / tasks / fs / computer / sessions / identity / spaces / navigation / theme .subscribe</code></td><td>各自推送 <code>*.updated</code>、<code>*.snapshot</code>、<code>spaces.data_invalidated</code> 等事件；界面不轮询。</td></tr>
+        <tr><td>共享 agent 远程对话</td><td>订阅流 + RPC</td><td><code>shared_agents.remote.open</code>（流）/ <code>remote.send</code>（RPC，带 client_message_id）</td><td>走另一条 connectionClass=shared_agent 的 Noise 连接；事件 <code>shared_agents.remote.message / closed</code>。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>问"是 RPC 还是 WebSocket"的答案是"都是"：传输是 WebSocket，加密是 Noise，语义是 HTTP 形状的 RPC；流式和推送不是另一种协议，而是同一种请求的响应体一直不结束。</div>
+    </div>
+  </section>
+
+  <section id="sec-notes">
+    <h2><span class="n">07</span>图例与边界</h2>
+    <p class="sub">三张图都基于前两篇报告的静态证据，这里统一说明记号与未验证项。</p>
+    <div class="legend" style="margin-top:0">
+      <span><i class="chip d"></i>客户端 / 外部输入</span>
+      <span><i class="chip"></i>Meta 服务或外部系统</span>
+      <span><i class="chip x"></i>入口与审批（关键控制点）</span>
+      <span><i class="chip ok"></i>VM 内，端到端加密之内</span>
+      <span><i class="chip line"></i>观察到的链路</span>
+      <span><i class="chip line red"></i>VM 反向调用本机</span>
+      <span><i class="chip line green"></i>Noise 会话</span>
+      <span><i class="chip line blue"></i>推断</span>
+    </div>
+    <div class="note">
+      <h2>未验证的推断</h2>
+      <ul>
+        <li><strong>模型推理的位置</strong>：图中放在 VM 外，依据是 Meta 的常规架构与 <code>model.set</code> 的 generation 版本化；也可能部分在 VM 内。需要运行时观察 sentinel 的出网审批或 <code>/model</code> 响应。</li>
+        <li><strong>入口对 auth_token 的校验方式</strong>：只观察到参数名与匿名 401；校验细节（JWT 还是不透明令牌、是否绑定 app_id）未知。</li>
+        <li><strong>节点通道是否也走 <code>/v1/noise</code></strong>：原生字符串里有 <code>/v1/noise</code> 与 <code>sharedIngressDialUrl</code>，但未看到完整 URL 构造；图中按同一入口绘制。</li>
+        <li><strong>透明日志的在线查询</strong>：代码里 Plexi / Sigstore 证明随证明包携带、客户端离线校验；是否还会在线查询日志未见证据。</li>
+        <li><strong>peers 的实际传输</strong>：路由在 daemon 下，经共享入口可解释；是否存在 VM 到 VM 的直接链路未知。</li>
+      </ul>
+    </div>
+  </section>
+  </main>
+</div>
+
+<script>
+const links=[...document.querySelectorAll('#toc a')];
+const spy=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(a=>a.classList.toggle('on',a.dataset.sec===e.target.id))})},{rootMargin:'-10% 0px -72% 0px',threshold:0});
+links.forEach(a=>{const s=document.getElementById(a.dataset.sec);if(s)spy.observe(s)});
+links.forEach(a=>a.addEventListener('click',ev=>{ev.preventDefault();const s=document.getElementById(a.dataset.sec);if(s)s.scrollIntoView({behavior:'smooth',block:'start'});history.replaceState(null,'','#'+a.dataset.sec)}));
+(()=>{const NS='http://www.w3.org/2000/svg';const layer=document.getElementById('annLayer'),bar=document.getElementById('annBar'),launch=document.getElementById('annLaunch'),toggle=document.getElementById('annToggle'),colorEl=document.getElementById('annColor'),sizeEl=document.getElementById('annSize');let on=false,tool='pen',drawing=false,cur=null,pts=[];const strokes=[];let fitting=false;
+const fit=()=>{if(fitting)return;fitting=true;layer.style.width='0px';layer.style.height='0px';const w=document.documentElement.clientWidth;const h=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight);layer.setAttribute('width',w);layer.setAttribute('height',h);layer.setAttribute('viewBox',`0 0 ${w} ${h}`);layer.style.width=w+'px';layer.style.height=h+'px';fitting=false};
+fit();addEventListener('resize',fit);new ResizeObserver(fit).observe(document.body);
+const setOn=v=>{on=v;document.body.classList.toggle('ann-on',on);toggle.textContent=on?'标注中':'开启标注';toggle.classList.toggle('on',on)};
+document.querySelectorAll('.ann-tool').forEach(b=>b.addEventListener('click',()=>{tool=b.dataset.tool;document.querySelectorAll('.ann-tool').forEach(x=>x.classList.toggle('on',x===b));if(!on)setOn(true);strokes.forEach(s=>{s.style.pointerEvents=tool==='eraser'?'stroke':'none'})}));
+toggle.addEventListener('click',()=>setOn(!on));
+document.getElementById('annUndo').addEventListener('click',()=>{const last=strokes.pop();if(last)last.remove()});
+document.getElementById('annClear').addEventListener('click',()=>{while(strokes.length)strokes.pop().remove()});
+document.getElementById('annHide').addEventListener('click',()=>{setOn(false);bar.classList.add('hidden');launch.classList.add('show')});
+launch.addEventListener('click',()=>{bar.classList.remove('hidden');launch.classList.remove('show')});
+const at=e=>{const r=layer.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
+layer.addEventListener('pointerdown',e=>{if(!on||e.button!==0||tool==='eraser')return;e.preventDefault();layer.setPointerCapture(e.pointerId);drawing=true;pts=[at(e)];cur=document.createElementNS(NS,'path');const w=+sizeEl.value;cur.setAttribute('fill','none');cur.setAttribute('stroke',colorEl.value);cur.setAttribute('stroke-linecap','round');cur.setAttribute('stroke-linejoin','round');if(tool==='mark'){cur.setAttribute('stroke-width',w*3.2);cur.setAttribute('stroke-opacity','0.32');cur.style.mixBlendMode='multiply'}else{cur.setAttribute('stroke-width',w)}cur.style.pointerEvents='none';cur.setAttribute('d',`M${pts[0][0]},${pts[0][1]}`);layer.appendChild(cur)});
+layer.addEventListener('pointermove',e=>{if(!drawing)return;const p=at(e),last=pts[pts.length-1];if(Math.hypot(p[0]-last[0],p[1]-last[1])<1.6)return;pts.push(p);cur.setAttribute('d',cur.getAttribute('d')+`L${p[0]},${p[1]}`)});
+const end=()=>{if(!drawing)return;drawing=false;if(pts.length<2){cur.remove()}else{strokes.push(cur)}cur=null};
+layer.addEventListener('pointerup',end);layer.addEventListener('pointercancel',end);
+layer.addEventListener('pointerover',e=>{if(on&&tool==='eraser'&&e.target!==layer){const i=strokes.indexOf(e.target);if(i>-1){strokes.splice(i,1);e.target.remove()}}});
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.key==='Escape'&&on)setOn(false);if((e.metaKey||e.ctrlKey)&&e.key==='z'&&on){e.preventDefault();const last=strokes.pop();if(last)last.remove()}});})();
+</script>
+</body>
+</html>

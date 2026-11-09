@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Muse / Hatch 运行时架构｜Cloud Hypervisor、Cell 与 Agent Loop</title><style>
+:root{--bg:#faf9f5;--ink:#242b22;--muted:#737b6d;--olive:#596d48;--accent:#b85b3d;--line:#e1e3d7;--panel:#fff;--soft:#f4ede5}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font:16px/1.85 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);overflow-wrap:anywhere}a{color:var(--olive);text-underline-offset:4px}a:hover{color:var(--accent)}h1,h2,h3{line-height:1.3;letter-spacing:-.025em}h1{font-size:clamp(34px,4.4vw,58px);margin:18px 0 22px}h2{font-size:29px;margin:10px 0 24px}h3{font-size:18px;margin:8px 0 12px}p{margin:14px 0}header,main,footer{max-width:980px;margin:auto;padding:30px}section{padding:48px 0;border-bottom:1px solid var(--line)}.eyebrow{font-size:11px;font-weight:750;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}.lead{font-size:19px;color:var(--muted);max-width:760px}.chips{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0}.chips span{padding:4px 10px;border:1px solid var(--line);border-radius:5px;font-size:12px;color:var(--muted)}.report-hero{margin-top:30px;padding:25px 28px;background:#eef1e6;border-left:4px solid var(--olive);border-radius:0 12px 12px 0}.report-hero p{margin-bottom:0}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:25px 0}.grid article{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:22px}.grid p{color:#64705e;margin-bottom:0}.callout{margin:24px 0;padding:20px 24px;border-left:3px solid var(--accent);background:var(--soft);border-radius:0 10px 10px 0}.callout p:first-child{margin-top:0}.callout p:last-child{margin-bottom:0}.flow{display:flex;flex-direction:column;align-items:center;gap:9px;margin:24px 0;padding:24px;background:#f1f3e9;border:1px solid var(--line);border-radius:12px;text-align:center}.flow span{padding:10px 16px;background:white;border:1px solid var(--line);border-radius:8px;width:100%;max-width:670px}.flow b{color:var(--olive)}.flow.horizontal{flex-direction:row;flex-wrap:wrap;justify-content:center}.flow.horizontal span{width:auto;max-width:100%;font-size:14px}.architecture{margin:25px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}.arch-band{display:grid;grid-template-columns:120px minmax(0,1fr);gap:15px;padding:20px;background:white;border-bottom:1px solid var(--line)}.arch-band:last-child{border-bottom:0}.arch-band b{color:var(--olive);font-size:13px}.arch-band div{font-size:14px}.arch-band.subtle{background:#f1f3e9}.identity{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;padding:22px;margin:24px 0;background:#edf1e5;border-radius:10px}.identity span{font:13px ui-monospace,monospace;border:1px solid var(--line);padding:10px;background:#fff;border-radius:6px}table{border-collapse:collapse;width:100%;margin:24px 0;font-size:14px}th,td{text-align:left;vertical-align:top;padding:13px 15px;border:1px solid var(--line)}th{background:#edf0e5;font-weight:650}td{background:#fff}code{font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eceee5;padding:3px 5px;border-radius:4px}pre{background:#263022;color:#edf1e7;padding:20px;border-radius:10px;overflow:auto;font:12px/1.9 ui-monospace,monospace;white-space:pre}pre code{padding:0;background:transparent;color:inherit}details{border:1px solid var(--line);background:white;border-radius:10px;padding:16px 20px;margin:18px 0}summary{cursor:pointer;font-weight:650;color:var(--olive)}.source{font-size:12px;color:var(--muted);margin-top:26px;line-height:2}.steps{padding-left:25px}.steps li{margin:15px 0}.demo{background:#edf1e5;padding:20px;border:1px solid var(--line);border-radius:12px;margin:24px 0}.demo-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}button{font:13px/1.5 inherit;padding:10px 13px;border:1px solid #ced5c2;background:white;border-radius:7px;color:#3d4934;cursor:pointer}button[aria-pressed=true]{background:var(--olive);color:white;border-color:var(--olive)}button:hover{border-color:var(--accent)}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}#failure-case{background:white;padding:20px;border-radius:8px;min-height:220px}#failure-case .status{font-size:11px;letter-spacing:.07em;color:var(--accent)}.stat{font-size:42px;font-weight:750;color:var(--olive);line-height:1.2;margin-bottom:16px}footer{font-size:12px;color:var(--muted);padding-top:35px}@media(max-width:850px){h2{font-size:24px}.arch-band{grid-template-columns:1fr;gap:6px}section{padding:36px 0}.flow,.callout{padding:18px}.demo{padding:14px}#failure-case{padding:17px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{details{break-inside:avoid}.demo-controls{display:none}a{color:inherit}}
+
+.doc-content>.hero{background:transparent;padding:0;color:var(--ink)}.original-summary{color:var(--muted)}.doc-content .card{background:white;border:1px solid var(--line);border-radius:12px;padding:22px;margin:20px 0;box-shadow:none}.doc-content section.card{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:44px 0;margin:0}.mini{background:white;border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}.note,.warn{padding:18px 22px;margin:20px 0;border-left:3px solid var(--accent);border-radius:0 9px 9px 0;background:#f4ede5}.warn{background:#f6eae4}span.warn{background:none;border:0;padding:0;margin:0;color:#9a653f}.ok{color:#526742}.bad{color:#a2543b}.kv,.sub{font-size:13px;color:var(--muted)}.badge,.tag{display:inline-block;border:1px solid var(--line);padding:4px 10px;border-radius:5px;font-size:12px;color:var(--muted);margin:4px 7px 4px 0;background:transparent}.step{background:white;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:13px;flex:1;min-width:145px}.arrow{color:var(--olive);font-size:19px}.doc-content .flow{flex-direction:row;flex-wrap:wrap;gap:10px;justify-content:center}.table-scroll{overflow-x:auto;max-width:100%;margin:24px 0;border-radius:9px}.table-scroll table{margin:0;min-width:530px}.table-scroll th,.table-scroll td{padding:13px;font-size:13px}.kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:24px 0}.kpi>div{background:white;border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0;color:var(--muted);font-size:13px}.kpi b{display:block;font-size:27px;color:var(--olive);line-height:1.5}.bar{height:8px;min-width:85px;background:#e9ecdf;border-radius:6px;overflow:hidden;margin-bottom:5px}.bar i{display:block;height:100%;background:var(--olive)}.svg-scroll{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:12px;background:#f6f7ef}.svg-scroll svg{min-width:1000px;width:100%;display:block;border:0!important;border-radius:0!important;background:transparent!important}.figure-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0 10px}.figure-controls span{font-size:12px;color:var(--muted)}dialog{width:min(96vw,1450px);max-width:96vw;max-height:92vh;border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--bg);color:var(--ink)}dialog::backdrop{background:#24311f70}.dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:16px}.dialog-heading h2{font-size:22px;margin:0}.dialog-heading button{white-space:nowrap}.source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}.source-grid a{display:block;text-decoration:none;background:white;border:1px solid var(--line);padding:20px;border-radius:12px}.source-grid a:hover{border-color:var(--olive)}.source-grid b{display:block;font-size:17px}.source-grid small{display:block;margin-top:8px;color:var(--muted);font-size:13px}.doc-content h3[id]{scroll-margin-top:24px}.doc-content pre code{color:inherit}.source-hash{font-size:11px;overflow-wrap:anywhere}#repro pre{max-width:100%;white-space:pre}.eyebrow{margin-bottom:10px}.doc-content footer{border-top:0}.doc-sidebar .doc-links a.subsection{font-size:12px;padding-left:20px;color:var(--muted)}@media(max-width:850px){.source-grid{grid-template-columns:1fr}.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}.doc-content .grid{grid-template-columns:1fr}.doc-content .flow{flex-direction:column}.flow .step{width:100%}.flow .arrow{transform:rotate(90deg)}.table-scroll table{display:table!important}.doc-content .card,.mini{padding:18px}.doc-content section.card{padding:34px 0}dialog{padding:15px}.dialog-heading h2{font-size:18px}}@media print{.figure-controls,dialog{display:none}.svg-scroll svg{min-width:0}.table-scroll table{min-width:0}details pre{max-height:none!important}}
+</style><style id="doc-sidebar-style">
+/* Shared document shell: modeled on the cluster deployment guide. */
+body.doc-page { margin:0; padding:0; background:#faf9f5; }
+.doc-layout { max-width:1260px; margin:0 auto; padding:40px 28px 90px;
+  display:grid; grid-template-columns:200px minmax(0,1fr); gap:46px; }
+body.doc-page .doc-sidebar { position:sticky; top:26px; align-self:start;
+  display:block; margin:0; padding:0; max-height:calc(100vh - 52px);
+  overflow-y:auto; font:13px/1.65 system-ui,-apple-system,sans-serif; }
+body.doc-page .doc-sidebar .doc-home { display:block; margin:0 0 24px;
+  color:#526742; text-decoration:none; padding:7px 10px; }
+body.doc-page .doc-sidebar .doc-label { display:block; margin:0 0 12px;
+  font-size:11px; font-weight:750; letter-spacing:.12em; color:#6f7669; }
+body.doc-page .doc-sidebar .doc-links { display:flex; flex-direction:column; gap:0; }
+body.doc-page .doc-sidebar .doc-links a { display:block; padding:7px 12px;
+  border-left:2px solid #dedfd4; color:#3d4538; text-decoration:none;
+  overflow-wrap:anywhere; font-size:13px; line-height:1.65; }
+body.doc-page .doc-sidebar .doc-links a:hover,
+body.doc-page .doc-sidebar .doc-links a[aria-current="location"] {
+  color:#b85b3d; border-left-color:#b85b3d; background:#f7ede550; }
+.doc-content { min-width:0; }
+body.doc-page .doc-content > header,
+body.doc-page .doc-content > main,
+body.doc-page .doc-content > footer { max-width:none; width:auto;
+  margin-left:0; margin-right:0; padding-left:0; padding-right:0; }
+body.doc-page .doc-content > header { padding-top:0; }
+body.doc-page .doc-content section { scroll-margin-top:24px; }
+body.doc-page .doc-content .diagram { max-width:100%; }
+body.doc-page .doc-sidebar a:focus-visible { outline:3px solid #b85b3d; outline-offset:3px; }
+/* The briefing keeps its original slideshow and keyboard navigation. */
+body.doc-page.present .doc-sidebar { display:none; }
+body.doc-page.present .doc-layout { display:block; max-width:1180px; padding-top:0; }
+body.doc-page.present .doc-content section { scroll-margin-top:80px; }
+@media(max-width:850px) {
+  .doc-layout { display:block; padding:24px 18px 60px; }
+  body.doc-page .doc-sidebar { position:static; max-height:none; overflow:visible;
+    margin-bottom:28px; }
+  body.doc-page .doc-sidebar .doc-home { margin-bottom:12px; }
+  body.doc-page .doc-sidebar .doc-links { flex-direction:row; flex-wrap:wrap; gap:6px; }
+  body.doc-page .doc-sidebar .doc-links a { padding:5px 8px; border:1px solid #dedfd4;
+    border-radius:6px; font-size:12px; }
+  body.doc-page .doc-content .grid { grid-template-columns:1fr; }
+  body.doc-page .doc-content table { display:block; max-width:100%; overflow-x:auto; }
+}
+@media print {
+  body.doc-page .doc-sidebar { display:none; }
+  .doc-layout { display:block; padding:0; max-width:none; }
+  .doc-content { width:100%; }
+}
+</style></head><body class="doc-page"><div class="doc-layout"><nav aria-label="章节目录" class="doc-sidebar"><a class="doc-home" href="index.html">← 研究资料首页</a><strong class="doc-label">阅读目录 / CONTENTS</strong><div class="doc-links"><a href="#materials">01 两份材料，一条架构阅读路径</a><a href="#overview">02 总览：三层嵌套，一句话版本</a><a href="#diagram">03 架构图</a><a href="#ch">04 Cloud Hypervisor 介绍</a><a href="#cell">05 Cell 是什么概念</a><a class="subsection" href="#cell-create">↳ Cell 完整创建链</a><a class="subsection" href="#inject">↳ 外层进程进入 Cell</a><a href="#vm-manage">06 VM 里面怎么管理 Cell，VM 常驻什么服务</a><a href="#msg-flow">07 用户消息怎么到达 hatch daemon</a><a href="#namespaces">08 Namespaces 技术原理：隔离什么，不隔离什么</a><a href="#repro">09 验证脚本：在自己的机器上复现（hatch-cell-repro v4 全文）</a><a href="#flow">10 完整交互逻辑</a><a href="#proc">11 Hatch 各进程是干什么的</a><a href="#opt">12 /opt/hatch 构成（平台预装，只读，随版本更新）</a><a href="#usage">13 怎么用 / 怎么观察这套系统</a></div></nav><div class="doc-content"><header><div class="eyebrow">MUSE / HATCH · 独立架构专题</div><h1>Muse / Hatch<br/>运行时架构</h1><p class="lead">复用既有分析，沿物理宿主 → VM → nspawn Cell → Agent Loop，读懂隔离、进程管理和消息交付。</p><div class="chips"><span>材料日期：2026-10-14</span><span>用户提供的分析整理</span><span>原架构图与脚本全文保留</span></div><div class="original-summary">
+<p>基于对这台 VM 的实地观察：进程、socket、/opt/hatch 目录、runtime-cell 启动脚本、DMI 与网络配置，整理 Cloud Hypervisor、Cell 隔离、Hatch 各进程职责与一次完整交互的链路。</p>
+<div><span class="badge">Cloud Hypervisor + KVM</span><span class="badge">systemd-nspawn Cell</span><span class="badge">Unix Socket IPC</span><span class="badge">无 TCP 监听端口</span><span class="badge">hatch 0.1.0 · e673ca8c3ce</span></div>
+<p class="kv">观察时间：2026-10-14 · VM 内核 Linux 7.0 · 内部代号 Jarvis（JARVIS_HOME / JARVIS_BIN_DIR）· 证据等级已在文中标注：实测 / 脚本明文 / 推测</p>
+</div></header><main><section class="card" id="materials"><div class="eyebrow">阅读导引 / 材料范围</div><h2>两份材料，一条架构阅读路径</h2><p>本专题整理用户提供的 Muse / Hatch 分析材料。主页面沿用运行时报告的章节、架构图和脚本全文，配套页面收录二进制分析报告；本次完成排版与发布，没有重新采集原 VM 证据或执行复现实验。</p><div class="source-grid"><a href="muse-hatch-runtime-architecture.html"><b>运行时架构</b><small>VM / Cell、进程注入、Unix socket、消息链路、持久目录与本地复现。</small></a><a href="muse-hatch-binary-analysis.html"><b>二进制分析工程报告 →</b><small>Rust workspace 地图、结构体 / API 痕迹、数据库候选与源码恢复上限。</small></a></div><div class="callout"><b>阅读时保留三个边界</b><p>“实测 / 脚本明文 / 推测”是原报告的证据分类。“一用户一 VM”等结论是原报告对观察环境的归纳，不代表已核验整个产品的所有部署方式。</p><p>运行时报告记录 <code>e673ca8c3ce</code>；工程报告说明 strings 来自该版本，而后续二进制已到 <code>a133d60349d</code>。这两个观察时点没有合并成一个当前版本。</p><p>主文第 8 节保留 v4 脚本全文；目录中另有 v2 命名实验包。本次不将不同版本当作同一份实跑证据。</p></div></section><section class="card" id="overview"><div class="eyebrow">01 / 原报告机制整理</div>
+<h2>总览：三层嵌套，一句话版本</h2>
+<p><strong>物理机 → KVM + Cloud Hypervisor → VM → nspawn Cell（我在这里）→ hatch daemon / execd</strong></p>
+<div class="grid">
+<div class="mini"><b>第 1 层 · Cell 内</b><br/>沙箱执行侧。只有 daemon + execd + 临时拉起的 Chromium / CLI。你的文件在 <code>/home/hatch</code>，根盘是 overlay、用完可销毁。无任何 TCP/UDP 监听。</div>
+<div class="mini"><b>第 2 层 · 同一 VM 的外层</b><br/>Harness 的宿主侧：cell leader、spawnd、noded、peerd、Postgres、inference 代理、yolk / ingress、egress 代理。所有 <code>/run/hatch/*.sock</code> 的监听者都在这层。</div>
+<div class="mini"><b>第 3 层 · VM 之外</b><br/>Meta 后端与模型服务。推理经 <code>hatch-egress-proxy:3128</code> 出去；会话状态在外层 Postgres，持久盘与 VM 解耦，所以 VM/Cell 重建不丢对话。</div>
+</div>
+<div class="note"><b>关键结论（本版新增证据）：</b>租户粒度是 <strong>VM : 用户 = 1 : 1</strong>——VM 层整套管理脚本按单租户写死（见第 5 节），VM 内固定四件套：<strong>1 个 Cell、1 个 daemon、1 个 Postgres、1 块持久 home 盘</strong>；物理机 : VM 仍是多台 VM 共用一台宿主机。Cell 按<strong>用户 / home</strong> 分配，不是按会话。主聊天、侧边聊天、定时任务、子代理（<code>~/workspace/agents/</code> 已有 350+ 工作区）共用同一个 Cell、同一个 daemon，靠 daemon 内部逻辑 + Postgres 里的 transcript 区分会话。更细的隔离在工具调用级：privsep 分 partially / fully isolated 两种。</div>
+</section><section class="card" id="diagram"><div class="eyebrow">02 / 原报告机制整理</div>
+<h2>架构图</h2>
+<h3>2.1 嵌套结构图</h3>
+<!-- SVG Diagram 1 -->
+<div class="figure-controls"><button id="open-diagram" type="button">放大架构图</button><span>保留原图内容；窄屏可左右滚动查看。</span></div><div aria-label="架构图，可横向滚动" class="svg-scroll" tabindex="0"><svg aria-label="原报告的物理宿主、Cloud Hypervisor VM、外层服务与 nspawn Cell 嵌套结构" role="img" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px" viewbox="0 0 1000 560" width="100%">
+<rect fill="#fff" height="540" rx="16" stroke="#a0aa92" stroke-width="2" width="980" x="10" y="10"></rect>
+<text font-size="15" font-weight="700" x="28" y="38">物理宿主机 · KVM</text>
+<rect fill="#edf1e5" height="478" rx="14" stroke="#687951" stroke-width="2" width="944" x="28" y="52"></rect>
+<text font-size="15" font-weight="700" x="46" y="78">Cloud Hypervisor (VMM, Rust / rust-vmm) — 创建并运行这台 VM</text>
+<text fill="#6b7462" font-size="12" x="46" y="98">DMI = Cloud Hypervisor · 仅 virtio 半虚拟化 · 无 legacy BIOS 设备模拟</text>
+<rect fill="#fff" height="398" rx="12" stroke="#293023" stroke-width="1.5" width="908" x="46" y="112"></rect>
+<text font-size="14" font-weight="700" x="64" y="138">VM 外层（Cell 之外，同一 Hypervisor 内）— Harness 宿主侧</text>
+<g font-size="12">
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="64" y="152"></rect><text x="76" y="175">yolk / ingress</text><text fill="#6b7462" x="76" y="193">veth host 侧接流量</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="248" y="152"></rect><text x="260" y="175">spawnd + cell leader</text><text fill="#6b7462" x="260" y="193">leader=2168 · 当前代</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="432" y="152"></rect><text x="444" y="175">noded / peerd</text><text fill="#6b7462" x="444" y="193">control.sock / api.sock</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="150" x="616" y="152"></rect><text x="628" y="175">Postgres</text><text fill="#6b7462" x="628" y="193">会话 / 状态</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="156" x="780" y="152"></rect><text x="792" y="175">egress proxy :3128</text><text fill="#6b7462" x="792" y="193">出站唯一通道</text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="64" y="218"></rect><text font-size="11" x="76" y="243"><tspan x="76" y="235">inference proxy → </tspan><tspan x="76" y="250">模型服务（VM 外）</tspan></text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="248" y="218"></rect><text font-size="11" x="260" y="243"><tspan x="260" y="235">cron-store / telemetry </tspan><tspan x="260" y="250">/ safety / vault / authd</tspan></text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="432" y="218"></rect><text font-size="11" x="444" y="243"><tspan x="444" y="235">browser-broker → </tspan><tspan x="444" y="250">独立 Browser VM</tspan></text>
+<rect fill="#f3f3ec" height="42" rx="8" stroke="#79826f" width="320" x="616" y="218"></rect><text x="628" y="243">/run/hatch/ 共享 tmpfs — 所有 unix socket 的交汇点</text>
+</g>
+<rect fill="#f0f3e8" height="208" rx="12" stroke="#526742" stroke-width="2" width="872" x="64" y="282"></rect>
+<text font-size="14" font-weight="700" x="82" y="308">Cell = htch-runtime（systemd-nspawn · 独立 PID / mount / user namespace · 2 核 / 8GB）</text>
+<g font-size="12">
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="82" y="324"></rect><text font-weight="700" x="94" y="348">hatch daemon · PID 24</text><text fill="#6b7462" x="94" y="366">会话承接 + 工具调度 · 当前代</text><text fill="#6b7462" x="94" y="380">PPID=0 · ~194MB · 14 线程</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="298" y="324"></rect><text font-weight="700" x="310" y="348">hatch-execd · PID 748</text><text fill="#6b7462" x="310" y="366">执行 shell 命令 · 当前代</text><text fill="#6b7462" x="310" y="380">bash 进程都由它派生</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="514" y="324"></rect><text font-weight="700" x="526" y="348">工具 CLI × 101</text><text fill="#6b7462" x="526" y="366">/opt/hatch/bin/*</text><text fill="#6b7462" x="526" y="380">多为 multicall 按名分发</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="188" x="730" y="324"></rect><text font-weight="700" x="742" y="348">Chromium（按需）</text><text fill="#6b7462" x="742" y="366">/opt/meta-chromium</text><text fill="#6b7462" x="742" y="380">平时不运行</text>
+<rect fill="#fff" height="62" rx="8" stroke="#a0aa92" width="410" x="82" y="404"></rect><text x="94" y="428">网卡 host0：198.19.0.2/30 → 对端 .1 在外层</text><text fill="#6b7462" x="94" y="448">入站不走 guest 网络栈 · ss 无 TCP 监听</text>
+<rect fill="#fff" height="62" rx="8" stroke="#a0aa92" width="410" x="508" y="404"></rect><text x="520" y="428">/home/hatch 持久盘：/dev/mapper/rv (btrfs)</text><text fill="#6b7462" x="520" y="448">根盘 overlay 临时 · home 独立持久</text>
+</g>
+</svg></div>
+<p class="kv">读图要点：浅棕 = 外层控制面，浅灰绿 = 外层服务面，浅绿 = Cell 沙箱。Cell 内的 root 是 user namespace 里的 root，对外层真 root 无权——/proc/24（当前代 daemon）的 environ/fd、ptrace 均 Permission denied，这正是隔离边界。图中 PID 与 leader 编号均为当前代数值，随 Cell 代次变化（见第 4、10 节）。</p>
+<h3>2.2 一次消息的时序</h3>
+<div class="flow">
+<div class="step"><b>1 用户发送</b><br/>App / Web</div><div class="arrow">→</div>
+<div class="step"><b>2 Meta 后端</b><br/>路由到用户 VM</div><div class="arrow">→</div>
+<div class="step"><b>3 peerd / noded 中继 + yolk / ingress</b><br/>VM 外层推送 · veth host 侧终止（详见第 6 节）</div><div class="arrow">→</div>
+<div class="step"><b>4 api.sock</b><br/>/run/hatch/sandbox-api/</div><div class="arrow">→</div>
+<div class="step"><b>5 hatch daemon</b><br/>组装上下文</div>
+</div>
+<div class="flow">
+<div class="step"><b>6 inference.sock</b><br/>+ egress :3128</div><div class="arrow">→</div>
+<div class="step"><b>7 模型推理</b><br/>VM 外模型服务</div><div class="arrow">→</div>
+<div class="step"><b>8 工具调用</b><br/>daemon 分发</div><div class="arrow">→</div>
+<div class="step"><b>9 执行</b><br/>execd / CLI / browser</div><div class="arrow">→</div>
+<div class="step"><b>10 循环回 6</b><br/>直到最终回复原路返回</div>
+</div>
+</section><section class="card" id="ch"><div class="eyebrow">03 / 原报告机制整理</div>
+<h2>Cloud Hypervisor 介绍</h2>
+<p>开源虚拟机监视器（VMM），跑在 KVM（或微软 MSHV）之上，用 Rust 基于 <strong>rust-vmm</strong> 组件库实现，最初由 Intel 发起，现属 Linux Foundation。定位是给云厂商跑现代云负载，不是通用模拟器。</p>
+<div class="grid">
+<div class="mini"><b>只做 virtio</b><br/>只提供半虚拟化设备，不模拟老硬件、没有传统 BIOS/legacy 那一套，仅 64 位。攻击面和启动路径都小得多。</div>
+<div class="mini"><b>小而快</b><br/>设计目标：最小模拟、低延迟、低内存占用、小攻击面；支持 CPU / 内存 / PCI 热插拔与机器间迁移。</div>
+<div class="mini"><b>对比 QEMU</b><br/>QEMU 大而全、什么硬件都能模拟；CH 只保留云场景需要的部分，所以轻得多——代价是不适合跑老旧/异构 guest。</div>
+</div>
+<p>在本环境中的证据：guest 内 DMI 直接写着 Cloud Hypervisor，VM 内核 Linux 7.0。它只负责最外层这台 VM，<strong>Cell 不是 CH 的概念</strong>，是 Hatch 在 VM 内部再套的一层。</p>
+</section><section class="card" id="cell"><div class="eyebrow">04 / 原报告机制整理</div>
+<h2>Cell 是什么概念</h2>
+<p>Cell 是 Hatch 自己的隔离单元，本质是 <strong>systemd-nspawn 容器</strong>：在 systemd-machined 里注册为一台名为 <code>htch-runtime</code> 的 machine，用 machinectl 管理。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>维度</th><th>Cell 的做法（脚本/实测）</th></tr>
+<tr><td>隔离</td><td>独立 PID / mount / user namespace；自己的 systemd 做 PID 1；overlay 根盘；专属 veth（guest 侧 host0）</td></tr>
+<tr><td>资源</td><td>本 Cell 观察到 2 核 / 8GB 配置</td></tr>
+<tr><td>生命周期</td><td>宿主侧 systemd 服务 <code>com.hatch.runtime-cell.service</code> 驱动创建（完整链见 4.1）；spawnd 渲染脚本并排队 bootstrap；pre-start / post-start / stop 钩子；停止时先写 <code>/run/hatch/ingress/runtime-cell-draining</code> 让 ingress 摘流量，再销毁</td></tr>
+<tr><td>可销毁可恢复</td><td>Cell 一次性；状态全在外面——会话在 Postgres、home 在独立持久盘、另有 resume / hotset 交接，所以重建不丢对话</td></tr>
+<tr><td>信任边界</td><td>脚本明文称 daemon 的 socket 目录是 “cell-root-forgeable”：Cell 内 root 也被当作不可信；控制面状态放在宿主侧 root 所有的目录；再加 scopes 配置、宿主侧 tc 限流、出站强制走代理</td></tr>
+<tr><td>网络</td><td>入站：tc ingress 分类器由 spawnd 挂在 veth 的 HOST 侧，guest 碰不到。出站：全部经 <code>hatch-egress-proxy:3128</code>。Guest 内 <code>ss</code> 看不到任何 TCP 监听</td></tr>
+</table></div>
+<h3 id="cell-create">4.1 Cell 怎么生出来：完整创建链</h3>
+<p>创建由宿主侧的 systemd 服务 <code>com.hatch.runtime-cell.service</code> 驱动，脚本都在 <code>/opt/hatch/runtime-cell/</code>。四步：</p>
+<ol>
+<li><b>备根盘（ensure-rootfs.sh）：</b>rootfs 放在宿主的 <code>/var/lib/hatch-runtime/rootfs</code>，镜像阶段已铺好。因 Cell 用 UID 映射（Cell 里的 root 在宿主是 uid 131072），脚本先用一个临时 nspawn 把根盘文件属主修正一遍。更新时用 <code>.incoming</code> 目录原子换入；pre-start 先做完整性检查——缺 shell、缺关键目录就触发 bootstrap 修复。</li>
+<li><b>备挂载与网络（pre-start.sh）：</b>把持久盘的 home 挂到位，建好 <code>/run/hatch</code> 共享目录与各 socket 目录，构建 egress 的 CA 信任库；并按这台 VM 的 channel，把 scoped skills 用 overlay 合并进 <code>/opt/hatch/skills</code> 的绑定源——不属于本 channel 的 skill 在 Cell 里根本不存在。</li>
+<li><b>拉起 Cell（launch-daemon.sh）：</b>核心只有一条命令（见下方代码块）。<code>systemd-nspawn</code> 负责创建全套 namespace（pid / mnt / net / user / ipc / uts），把 rootfs 挂为根、在新 pid namespace 里把 guest 的 systemd 拉成 PID 1，建 veth 对（宿主侧 <code>ve-htch-runtime</code>、Cell 侧 <code>host0</code>），把 <code>/opt/hatch</code>（只读）、<code>/run/hatch</code>、home bind 进去，并向宿主 machined 注册 machine。<code>machinectl show</code> 里的 Leader 就是 Cell 的 PID 1 在宿主侧的 PID（当前代 2168）。</li>
+<li><b>就绪确认：</b>Cell 写出 <code>runtime-cell.ready</code> 文件，宿主侧各脚本轮询它、并用 machinectl 确认 Leader 存在之后，才继续后续步骤。</li>
+</ol>
+<pre>systemd-nspawn --boot \
+  --directory=$rootfs \
+  --machine=htch-runtime \
+  --private-users-ownership=map \
+  ...   # bind /opt/hatch(只读) / /run/hatch / home；veth 网络</pre>
+<h3 id="inject">4.2 外层怎么往 Cell 里放进程：setns / nsenter</h3>
+<p><b>原理：namespace 不是墙，是视图。</b>谁创建了它、谁有宿主 root，谁就能进。内核提供 <code>setns()</code> 系统调用：拿着目标 namespace 里任一进程的 PID，就能把自己迁进那组 namespace，之后 fork 出来的子进程就“生在 Cell 里”。反方向不行——Cell 的 root 在宿主只是 uid 131072 的普通用户，没有对应权限。宿主 root 攥着 Leader 的 PID，就等于攥着所有 namespace 的门把手。实测有三种进入方式：</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>方式</th><th>机制与实证</th></tr>
+<tr><td>① nsenter（脚本层）</td><td><code>post-start.sh</code> 用 <code>nsenter --target $leader --net</code> 进 Cell 的网络 namespace，给 host0 配地址、挂 tc；<code>pre-start.sh</code> 用 <code>nsenter --target 1 --mount</code> 在宿主侧做挂载。</td></tr>
+<tr><td>② 二进制自己 setns（daemon / execd 的 anchor 模式）</td><td><code>control-execd.sh</code> 注释明文：execd 不用 nsenter 包装，它内部调 <code>enter_runtime_cell_unsupervised</code>——宿主侧父进程留作 systemd 的 MainPID（叫 anchor），fork 的子进程 setns 进 Cell、迁入 Cell 的 cgroup 后，再 exec 服务本体。</td></tr>
+<tr><td>③ socket 激活跨界</td><td>execd 的监听 fd 是宿主 systemd 先打开的，通过 <code>LISTEN_FDS</code> 协议在 exec 时传给进 Cell 的子进程——所以那个 socket 出生在宿主、干活在 Cell。</td></tr>
+</table></div>
+<p>方式 ② 正好解释了前文两个怪现象：daemon / execd 在 Cell 里 <strong>PPID 为 0</strong>（父进程不在这个 namespace 里），且 Cell 内的 root <strong>读不了它们的 /proc</strong>（它们带着宿主侧的信任级别，Cell 只能使用、不能检查或干预）。</p>
+<h3>入站流量被谁消费？</h3>
+<p>不在 Cell 进程空间里。<code>ss -xlnp</code> 中 <code>sandbox-api/api.sock</code> 等监听 socket 的属主一栏为空——监听进程在 Cell 的 PID namespace 之外。消费方是外层 runtime（daemon 启动参数 <code>--runtime-cell-leader=2168</code> 所指的 leader 一侧——此为当前代数值、随代次变化，含 noded、peerd）。Daemon 同时也是客户端：它与 <code>proxy/inference.sock</code>、<code>telemetry.sock</code> 有已建立连接，在消费外层的推理与遥测服务。</p>
+<div class="warn"><b>为什么截不到 daemon 消费的内容（实测三路全堵）：</b>① strace 附加 → <code>ptrace: Operation not permitted</code>（ptrace_scope=1 + 跨 namespace）；② /proc/24（当前代 daemon）的 maps/environ/fd → Permission denied；③ unix socket 不走 guest 网络栈，没有抓包面，且 socket 目录无写权限。劫持控制通道本身就是隔离要防的事，不做。</div>
+</section><section class="card" id="vm-manage"><div class="eyebrow">05 / 原报告机制整理</div>
+<h2>VM 里面怎么管理 Cell，VM 常驻什么服务</h2>
+<p>分工一句话：<strong>VM 层管托管，Cell 管隔离。</strong>VM 层（主机名 <code>htch-runtime</code> 的外层系统）负责 Cell 的生老病死、网络出入口、状态持久化与凭据；Cell 只是被托管的执行沙箱，关机即弃，状态不落在 Cell 里。</p>
+<div class="note"><b>单租户证据（脚本明文）：</b>整套管理脚本按“一个 VM 只服务一个用户”写死，没有任何多租户分片参数——① <code>control-daemon.sh</code>（VM 层、root 运行）全程只管<strong>一个</strong> daemon，生命周期标记是 <code>/run/hatch/daemon-ctl/</code> 下的单例文件，没有循环、没有 daemon 列表、没有按用户 / Cell 分片的参数；② 名字全是常量：machine 写死 <code>htch-runtime</code>、veth 写死 <code>ve-htch-runtime</code>、rootfs 是单例路径 <code>/var/lib/hatch-runtime/rootfs</code>、<code>JARVIS_HOME=/home/hatch</code> 写死——多租户设计里这些都必须参数化；③ Postgres 与 Cell 同生共死（见下表）；④ 脚本由 spawnd 在<strong>部署时渲染生成</strong>，常量直接烙进文本：租户归属在 VM 发放那一刻就定死，运行时不做多路复用。</div>
+<h3>5.1 管理闭环：从部署到销毁</h3>
+<ol>
+<li><b>出厂烙印（spawnd 渲染）：</b>spawnd 在部署时把 <code>/opt/hatch/runtime-cell/</code> 下的脚本渲染成这台 VM 的专属版本（机器名、路径、home、channel 都是常量），并排队 bootstrap。</li>
+<li><b>备根盘（ensure-rootfs.sh）：</b>从 rootfs-base 刷新 <code>/var/lib/hatch-runtime/rootfs</code>（btrfs 快照）；Cell 再叠一层 overlay（upper 在 tmpfs），所以 Cell 本体一次性。</li>
+<li><b>备挂载（pre-start.sh）：</b>把持久 home 盘、<code>/run/hatch</code> 共享 tmpfs、CA 信任库、按 channel 合并好的 <code>/opt/hatch</code> 视图 bind 进 Cell。</li>
+<li><b>开机（launch-daemon.sh）：</b>用下方 nspawn 命令以 <code>--boot</code> 拉起 Cell 自己的 systemd（PID 1）；宿主侧从 machinectl 拿到 Leader PID——它同时是进入 Cell 各 namespace 的句柄。</li>
+<li><b>注入常驻进程（control-daemon.sh / control-execd.sh）：</b>VM 层先轮询 <code>runtime-cell.ready</code> 与 Leader 存在，确认 Cell 就绪后，<code>control-daemon.sh</code> 直接 <code>exec hatch daemon --runtime-cell-leader=&lt;leader&gt;</code>：父进程留在外面作 systemd 的 MainPID 锚点，子进程 <code>setns()</code> 迁进 Cell 再 exec 本体（机制详见 4.2）。execd 同理，其监听 fd 由外层 systemd 经 <code>LISTEN_FDS</code> 传入。</li>
+<li><b>网络收尾（post-start.sh）：</b>用 <code>nsenter</code> 钻进 Cell 的 net namespace 给 host0 配 veth 地址与 tc 规则；tc ingress 分类器挂在 veth 的 HOST 侧，由 spawnd 负责。</li>
+<li><b>摘流与销毁（stop.sh）：</b>先置 <code>/run/hatch/ingress/runtime-cell-draining</code> 标记让 ingress 不再送新消息，再按固定时序停 Cell，并把 Postgres 实例 <code>postgresql@18-hatch.service</code>（PostgreSQL 18）一起停掉——数据库生命周期与单个 Cell 绑定，正是单租户的又一证据。</li>
+</ol>
+<pre>systemd-nspawn --quiet --boot --keep-unit --settings=override \
+  --directory=$rootfs --machine=htch-runtime \
+  --private-users-ownership=map
+# --boot：Cell 内 systemd 做 PID 1；--private-users-ownership=map：
+# Cell 里的 root 对应宿主 uid 131072，不是真 root</pre>
+<h3>5.2 VM 常驻服务清单（Cell 之外）</h3>
+<p>VM 外层常驻的不是单个程序，而是一整套宿主侧服务。它们共同的交汇点是共享 tmpfs <code>/run/hatch</code>：所有 unix socket 都摆在那里，Cell 里没有任何 TCP 监听。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>分组</th><th>常驻组件</th><th>职责</th></tr>
+<tr><td>控制面</td><td>spawnd · cell leader · control-daemon / control-execd 锚点进程 · hatch-healthd · noded（<code>noded/control.sock</code>）· peerd（<code>peerd/api.sock</code>）</td><td>渲染脚本与装配 Cell；leader 即 Cell PID 1 在宿主侧的 PID；锚点进程在外 exec daemon / execd 并 setns 送入 Cell；healthd 盯 daemon / vault 健康；noded / peerd 承担节点控制与对等 / 中继服务</td></tr>
+<tr><td>数据与状态</td><td>PostgreSQL 18（<code>postgresql@18-hatch.service</code>）· cron-store · 持久 home 盘</td><td>会话与 transcript 经 unix socket 存 PG（socket 在 <code>/run/hatch/postgres/</code>，经代理转入 Cell 视图）；cron-store 管定时调度、到点唤醒 daemon；home 独立持久，Cell / VM 重建不丢</td></tr>
+<tr><td>网络与安全</td><td>yolk / ingress + ingress-rev-proxy · egress proxy（<code>:3128</code>）· gk-proxy · authd / authdc + hatch-vault · safety</td><td>ingress 在 veth HOST 侧终止入站并管 draining 摘流；一切出站强制经 egress 代理；认证与凭据保险箱在外层，凭据不以明文进 Cell；safety 管安全策略面</td></tr>
+<tr><td>Agent 服务面</td><td>inference 代理 · browser-broker / browser-service · telemetry</td><td>推理请求经 inference 代理 + egress 转到 VM 外模型服务；浏览器会话由 broker 路由到独立 Browser VM；telemetry 汇聚遥测</td></tr>
+</table></div>
+<div class="grid">
+<div class="mini"><b>VM 内固定四件套</b><br/>1 Cell（htch-runtime）· 1 daemon · 1 Postgres · 1 块持久 home 盘。比喻：每个用户领到的是一台“预装好的电器型 VM”，VM 层脚本是它的电源管理——从外面把 daemon 送进 Cell，是给唯一的住户开门，不是一栋楼里给多户派工。</div>
+<div class="mini"><b>为什么 daemon 要“外面生、里面住”</b><br/>daemon 需要高权限编排，但信任级别不能交给 Cell 内的 root（user namespace 映射后的假 root）。锚点留在外层，daemon 在 Cell 视图里干活、Cell 却动不了它（/proc 读不到、ptrace 不允许，见 4.2）。</div>
+</div>
+</section><section class="card" id="msg-flow"><div class="eyebrow">06 / 原报告机制整理</div>
+<h2>用户消息怎么到达 hatch daemon</h2>
+<div class="note"><b>核心区别：消息是“被推进 Cell”的，不是“连进 Cell”的。</b>Cell 里没有任何网络监听口（<code>ss</code> 看不到 TCP 监听），外部也永远不直接连接 daemon——daemon 的所有入口都是先落到 VM 外层、再经共享目录里的 unix socket 递进来的。</div>
+<div class="flow">
+<div class="step"><b>1 客户端</b><br/>App / Web 发送</div><div class="arrow">→</div>
+<div class="step"><b>2 Meta 后端</b><br/>按会话定位用户 VM</div><div class="arrow">→</div>
+<div class="step"><b>3 VM 外层中继</b><br/>peerd / noded 常驻通道推送</div><div class="arrow">→</div>
+<div class="step"><b>4 ingress 终止</b><br/>veth HOST 侧 yolk / ingress-rev-proxy</div><div class="arrow">→</div>
+<div class="step"><b>5 跨界 socket</b><br/>/run/hatch/sandbox-api/api.sock</div><div class="arrow">→</div>
+<div class="step"><b>6 hatch daemon</b><br/>会话层 → Agent Loop</div>
+</div>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>跳</th><th>发生了什么</th><th>证据等级</th></tr>
+<tr><td>1 客户端 → Meta 后端</td><td>用户在 App / Web 发消息，后端按会话找到该用户固定的那台 VM。单租户使路由很简单：<strong>会话 → 用户 → 固定 VM</strong>，不存在 VM 内再分租户这一步。</td><td>视野外 / 推测</td></tr>
+<tr><td>2 后端 → VM 外层</td><td>VM 层的 peerd / noded 是常驻组件（socket 分别为 <code>peerd/api.sock</code>、<code>noded/control.sock</code>），推测由它们维持与后端的常驻连接 / 中继通道，消息被<strong>推下来</strong>——VM 不需要对公网开入站口。</td><td>组件实测 · 机制推测</td></tr>
+<tr><td>3 VM 外层 ingress 终止</td><td>入站在 veth 的 <strong>HOST 侧</strong>被 yolk / ingress-rev-proxy 终止，tc 分类器由 spawnd 挂在这一侧，Cell 内的进程碰不到。Cell 要停机换代时先置 <code>/run/hatch/ingress/runtime-cell-draining</code> 标记，新消息就不再往这一代 Cell 送。</td><td>脚本明文</td></tr>
+<tr><td>4 跨界进 Cell</td><td>不走网络，走共享 tmpfs <code>/run/hatch</code> 里的 unix socket（主口 <code>sandbox-api/api.sock</code>）。文件系统两边共享，socket 文件天然跨界——这是整套设计里唯一的入站门。</td><td>实测</td></tr>
+<tr><td>5 daemon 承接</td><td>daemon 自己在 <code>/run/hatch</code> 下挂着 http-api / realtime-protocol / websocket 一组 socket，消息从这里进 daemon 的会话层（hatch_server 的 websocket / streaming 模块），组装上下文（Postgres 里的 transcript + 持久盘的 home）后进入 Agent Loop。</td><td>实测 / 脚本明文</td></tr>
+</table></div>
+<h3>回程与旁路</h3>
+<ul>
+<li><b>流式回复原路返回：</b>模型产出的 token 沿同一条 socket 链反向推送——daemon → <code>/run/hatch</code> socket → VM 外层中继 → Meta 后端 → 客户端，不新开任何连接。</li>
+<li><b>后台触发走同一条门：</b>定时任务由外层 cron-store 到点经同一 socket 链路唤醒 daemon，和用户消息共用入口，只是触发方不同。</li>
+<li><b>换代时不丢消息入口：</b>draining 标记先摘流、新一代 Cell 就绪后入口再指向新 daemon；会话状态在外层 Postgres，所以换代对用户无感（实例见第 10 节的换代记录）。</li>
+</ul>
+<p><b>一句话概括：</b>后端推送 → VM 外层中继终止 → 共享目录 socket 塞进 Cell → daemon 接收。没有一步是“外部直接连到 daemon”。</p>
+</section><section class="card" id="namespaces"><div class="eyebrow">07 / 原报告机制整理</div>
+<h2>Namespaces 技术原理：隔离什么，不隔离什么</h2>
+<p>第 4 节的 Cell、第 4.2 节的注入，底下用的都是同一组内核原语：<strong>Linux Namespaces（命名空间）+ Cgroups</strong>，统称容器技术。谱系上：namespaces 从 2002 年起陆续进内核（mount 最早、user 最晚、约 2013 年补齐），cgroups 2008 年来自 Google；LXC 最先把它们拼成容器，Docker（2013）把这套拼法流行开，systemd-nspawn（2010）是同一批原语的另一个组装者，定位「系统级容器」，所以能直接 boot 一个完整发行版。</p>
+<div class="note"><b>一句话结论：namespaces 隔离的是「名字和视图」，不隔离「实体」。</b>它让每个进程以为自己独占一套编号系统，但底下还是同一个内核、同一台机器。入口只有两个系统调用：<code>clone()</code> 创建时带 <code>CLONE_NEW*</code> 标志开新 namespace，<code>setns()</code> 事后把已有进程迁进别人的 namespace——hatch 的 daemon 和第 8 节的 injector 用的都是后者，<code>nsenter</code> 只是 setns 的命令行包装（机制见 4.2，这里不重复）。</div>
+<h3>7.1 隔离了什么：每种 namespace 虚拟化一类全局资源的名字</h3>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>Namespace</th><th>隔离 / 虚拟化的名字</th><th>在 hatch Cell / 本地复现中的体现</th></tr>
+<tr><td><code>pid</code></td><td>进程编号与进程树视图：里面只能看到自己的进程，编号从 1 重新开始；宿主侧同时保留它自己的全局编号</td><td>Cell 自己的 systemd 是 PID 1；daemon 在 Cell 内 PPID=0（父进程在 namespace 之外）；复现中注入的 sleep 宿主 PID 39033、Cell 内 PID 39（同一个进程、两套编号，见第 8 节实测）</td></tr>
+<tr><td><code>mnt</code></td><td>挂载点视图：看到的文件系统树是裁过的，挂载/卸载不影响外面</td><td>Cell 根盘是 overlay（upper 在 tmpfs、用完可销毁）；<code>/opt/hatch</code> 只读 bind、<code>/run/hatch</code> 共享、home 持久盘 bind 进来——看到哪棵树由外层说了算</td></tr>
+<tr><td><code>net</code></td><td>整套网络栈的名字：网卡、IP、路由、端口、防火墙规则，与宿主互不干扰</td><td>Cell 内只有 <code>lo</code> + <code>host0</code>（veth 的这一端），宿主侧是 <code>ve-htch-runtime</code>；Cell 内无任何 TCP 监听。IP 是独立的，但不一定自动配上：两端 systemd-networkd 都在跑时可由宿主侧 DHCP 下发；最小 rootfs 常只有 IPv6 链路本地地址（<code>fe80::</code>）。hatch 不等 DHCP——<code>post-start.sh</code> 从宿主侧用 nsenter 钻进 Cell 的 net namespace 手动配上 <code>198.19.0.2/30</code></td></tr>
+<tr><td><code>user</code></td><td>uid/gid 的映射，以及 capability 的作用域：里面的 root 映射到外面一个普通 uid</td><td>Cell 里的 root 对应宿主 uid 131072 起的映射段，不是真 root；注入进程全程不改凭据、uid 还在映射之外，于是 Cell 内 <code>ps</code> 里属主溢出显示成 <code>nobody</code>（65534），Cell 的 root 读它的 <code>/proc/&lt;pid&gt;/environ</code> 被拒——daemon 在 Cell 内读不了，同一个机理（见 4.2、第 8 节）</td></tr>
+<tr><td><code>ipc</code></td><td>System V IPC 与 POSIX 消息队列的名字：共享内存、信号量、消息队列各成一套</td><td>nspawn 起 Cell 时随全套 namespace 一起创建；Cell 与外层之间不靠 IPC 通信，跨界走的是故意共享的 <code>/run/hatch</code> socket 目录（见 7.2 第 4 条）</td></tr>
+<tr><td><code>uts</code></td><td>主机名与域名：里面改 hostname 不影响外面</td><td>Cell / machine 名为 <code>htch-runtime</code>；复现实验里对应 <code>testcell</code></td></tr>
+<tr><td><code>cgroup</code></td><td>cgroup 路径视图：进程看到的自身 cgroup 路径以自己的根为准（注意：它只改「视图」，不管配额，配额见 7.2 第 2 条）</td><td>daemon 注入时要迁入 Cell 的 cgroup 再 exec 本体（见 4.2 方式 ②）；systemd 本身就是 cgroup 的管理者，与 nspawn 同一套血统</td></tr>
+<tr><td><code>time</code></td><td>时钟偏移：给里面的 <code>CLOCK_MONOTONIC</code> / <code>CLOCK_BOOTTIME</code> 加一层偏移（墙钟 <code>REALTIME</code> 不在此列）</td><td>通用能力列在此处凑齐八种；hatch 的 Cell 创建链（4.1）未见单独使用 time namespace 的证据，不把它算作 hatch 的做法</td></tr>
+</table></div>
+<h3>7.2 没隔离什么：共享的实体</h3>
+<ol>
+<li><b>内核本身。</b>所有容器共用一个内核，syscall 接口面完全共享：一个内核漏洞被打穿，全体容器一起沦陷；一个进程触发内核 panic，全机陪葬。这是它和 VM 的本质差距——VM 连内核都是一人一个。</li>
+<li><b>资源用量。</b>namespaces 一点都不管 CPU / 内存 / IO 吃多少，那是 <strong>cgroups</strong> 的活：进程分组 + CPU / 内存配额（本 Cell 观察到的 2 核 / 8GB 就是它限的，用户机器上 <code>systemd --version</code> 里的 <code>default-hierarchy=unified</code> 即 cgroups v2 已统一启用）。只有 ns 没有 cgroup，一个失控进程能吃光整机内存、触发全局 OOM。</li>
+<li><b>没被 namespace 化的内核全局状态。</b>真实墙钟时间、大部分 sysctl（<code>vm.*</code>、<code>kernel.*</code> 改了就是改全机，所以容器里 <code>/proc/sys</code> 多是只读）、内核日志、内核模块加载、perf / ftrace 调试面——这些只能靠 capability 裁剪和 seccomp 挡在外面，不是 ns 的功劳。</li>
+<li><b>你主动放进去的东西。</b>隔离是选择性的：bind 进去的目录就是真目录、共享的 socket 目录就是真通道——hatch 的跨界通信恰恰建立在「故意不隔离 <code>/run/hatch</code>」之上。ns 只保证默认看不见，不保证你递进去的东西安全。</li>
+<li><b>微架构侧信道。</b>缓存时序、Spectre 类攻击面完全不隔离；这一层连 VM 也只能缓解。</li>
+</ol>
+<h3>7.3 所以完整的容器是四件套，hatch 还在外面再套一层 VM</h3>
+<div class="grid">
+<div class="mini"><b>namespaces</b><br/>管视图：每类全局资源的名字各成一套（7.1）。</div>
+<div class="mini"><b>cgroups</b><br/>管配额：CPU / 内存 / IO 的分组与上限。</div>
+<div class="mini"><b>capability / seccomp</b><br/>管 syscall 面：裁掉不需要的特权与系统调用（如 run-daemon.sh 里丢 CAP_SYS_PTRACE）。</div>
+<div class="mini"><b>挂载裁剪</b><br/>管文件面：pivot_root / chroot 切根、只读 bind、overlay 一次性根盘。</div>
+</div>
+<p>对照最外层：<strong>VM 靠 CPU 虚拟化扩展（VT-x + KVM）骗出一台机器，容器靠 namespaces + cgroups 在同一个内核里切出一个视图。</strong>hatch 在四件套外面还要再套一层 VM，原因正是 7.2 第 1 条——agent 要在 Cell 里跑任意 shell 和用户任务，必须假设它能被打穿，那就得让它打穿之后面对的是另一个内核，而不是宿主的。第 8 节的脚本就是把这套在自己机器上亲手复现一遍。</p>
+</section><section class="card" id="repro"><div class="eyebrow">08 / 原报告机制整理</div>
+<h2>验证脚本：在自己的机器上复现（hatch-cell-repro v4 全文）</h2>
+<p>下面三份文件是前面 hatch-cell-repro 实验包 v4 的<strong>全文原样收录</strong>（不是节选改写）：在 Ubuntu 上用 systemd-nspawn 起一个 cell，再从 cell 外面用 setns 把一个进程注入进去运行，逐条验证第 4.2、7 节讲的现象。宿主不需要嵌套虚拟化——nspawn 共用内核；只有想完整复刻「物理机 → VM → cell」三层时，才先按 README 第 0 步开一台 VM。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>文件</th><th>作用</th></tr>
+<tr><td><code>ubuntu-repro.sh</code></td><td>一键脚本（Ubuntu）：依赖检查 → debootstrap 备 rootfs → 写 .nspawn 配置 → machinectl start → 编译 injector 注入 sleep → systemd-run --pipe 跑验证；带 clean 清理与 PrivateUsers 功能探测/自动降级。</td></tr>
+<tr><td><code>injector.c</code></td><td>setns 自注入的最小复刻：宿主视角先打开目标 Leader 的全部 ns fd 与 root fd，再逐个 setns、fchdir+chroot 修正根、setns pid 后 fork、exec 目标程序；全程不改凭据。</td></tr>
+<tr><td><code>README.md</code></td><td>说明文档：hatch 与本实验的对照表、环境要求、手动步骤（备 rootfs / 起 cell / 三种进入方式）与验证清单。</td></tr>
+</table></div>
+<h3>运行方式（Ubuntu）</h3>
+<pre>sudo apt install systemd-container debootstrap build-essential
+tar -xzf hatch-cell-repro-v4-ubuntu.tar.gz &amp;&amp; cd hatch-cell-repro
+sudo ./ubuntu-repro.sh            # 全流程：起 cell → 注入 sleep → 跑验证
+sudo ./ubuntu-repro.sh clean      # 清理：停 cell 并删除 rootfs 与配置</pre>
+<p class="kv">Ubuntu 注意：<code>machinectl</code> / <code>systemd-nspawn</code> 在 <code>systemd-container</code> 包里，不装会找不到命令。Ubuntu 22.04 的 systemd 虽标 249，但官方补丁已回补 <code>--private-users=pick</code> 与 <code>--private-users-ownership=</code>；脚本不死看版本号，而是探测 <code>systemd-nspawn --help</code> 实际列出的选项，探测到 ownership 就用 hatch 同款 <code>pick + ownership=map</code>，启动失败再自动降级为显式范围 <code>PrivateUsers=131072:65536</code>（131072 也正是 hatch 实测的映射起点）。rootfs 默认用宿主自己的 Ubuntu 版本，想换 Debian：<code>SUITE=bookworm MIRROR=https://deb.debian.org/debian sudo ./ubuntu-repro.sh</code>——suite 与镜像地址要成对换，只改一个会报错。</p>
+<h3>已实测的验证结果（用户本机，Ubuntu 22.04 · systemd 249）</h3>
+<pre>PASS: cell 已启动,Leader(cell 的 systemd 在宿主侧的 PID)= 38949
+PASS: sleep 已注入:宿主 PID=39033,cell 内 PID=39,锚点 injector PID=39031
+
+# 管道方式手动复核（cell 内 ps 看到的就是注入的 sleep）:
+$ systemd-run -q -M testcell --wait --pipe /bin/ps aux | grep sleep
+nobody        39  0.0  0.0   2788  1664 ?        S    17:12   0:00 /bin/sleep 600</pre>
+<ul>
+<li><b>双编号：</b>同一个 sleep，宿主 PID 39033、Cell 内 PID 39——pid namespace 的两套编号（7.1）。</li>
+<li><b>属主 nobody：</b>sleep 的凭据还是宿主侧的 root，在 Cell 的用户映射里没有对应位置，溢出显示成 nobody(65534)——「住在 cell 里、身份在 cell 外」的进程，和 hatch daemon 在 Cell 内读不了 /proc 是同一个原理；脚本还会验证 Cell 内 root 读它的 <code>environ</code> 被拒（Permission denied）。</li>
+<li><b>踩坑记录（已修进 v4）：</b>① injector 必须在宿主视角下先把全部 ns fd 一次性打开再逐个 setns——若中途已进对方 mount namespace 并 chroot，<code>/proc</code> 已是 cell 的 procfs，按路径再打开 <code>ns/pid</code> 只会报 <code>No such file or directory</code>；② 验证不能用 <code>machinectl shell</code>（它分配 PTY：带横幅、按固定 80 列折行，长行被截断后 grep 必然假 FAIL），必须走 <code>systemd-run --pipe</code> 的纯管道输出。</li>
+</ul>
+<h3>脚本全文（点击展开）</h3>
+<details style="margin:12px 0"><summary><b>ubuntu-repro.sh</b>（5226 字节，点击展开全文）</summary><pre style="max-height:460px;overflow:auto"><code>#!/usr/bin/env bash
+# ubuntu-repro.sh — 在 Ubuntu 上一键复现 hatch 的两层结构:
+# nspawn 起 cell → 从外面 setns 注入进程 → 验证「外生内住」现象。
+#
+# 用法:
+#   sudo ./ubuntu-repro.sh          # 全流程
+#   sudo ./ubuntu-repro.sh clean    # 停 cell 并删除 rootfs 与配置
+#   SUITE=bookworm MIRROR=https://deb.debian.org/debian sudo ./ubuntu-repro.sh
+#                                   # rootfs 换 Debian(默认用宿主自己的 Ubuntu 版本)
+#
+# 依赖:systemd-container(machinectl / systemd-nspawn)、debootstrap、build-essential
+set -euo pipefail
+
+MACHINE=testcell
+ROOTFS=/var/lib/machines/$MACHINE
+NSPAWN_CONF=/etc/systemd/nspawn/$MACHINE.nspawn
+SUITE="${SUITE:-$(lsb_release -cs 2&gt;/dev/null || echo noble)}"
+MIRROR="${MIRROR:-http://archive.ubuntu.com/ubuntu}"
+WORKDIR="$(cd "$(dirname "$0")" &amp;&amp; pwd)"
+INJ="$WORKDIR/injector"
+
+log() { printf '\n== %s ==\n' "$*"; }
+pass() { printf 'PASS: %s\n' "$*"; }
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "请用 sudo 运行"
+  exit 1
+fi
+
+clean() {
+  machinectl terminate "$MACHINE" 2&gt;/dev/null || true
+  sleep 1
+  rm -f "$NSPAWN_CONF"
+  rm -rf "$ROOTFS"
+  echo "已清理 $MACHINE"
+}
+
+if [ "${1:-}" = clean ]; then
+  clean
+  exit 0
+fi
+
+# --- 0. 依赖与版本 ---
+log "检查依赖"
+for c in machinectl systemd-nspawn debootstrap cc; do
+  command -v "$c" &gt;/dev/null ||
+    { echo "缺少命令: $c(先执行: apt install systemd-container debootstrap build-essential)"; exit 1; }
+done
+SYSVER=$(systemd --version | head -1 | grep -oE '[0-9]+' | head -1)
+# 功能探测,不单看版本号:Ubuntu 的 249 补丁版就带了 pick 与 ownership,
+# 以 systemd-nspawn --help 实际列出的选项为准
+PU_MODE=range
+if systemd-nspawn --help 2&gt;/dev/null | grep -q 'private-users-ownership'; then
+  PU_MODE=map
+elif [ "$SYSVER" -ge 251 ]; then
+  PU_MODE=pick
+fi
+echo "systemd 版本: $SYSVER;PrivateUsers 模式: $PU_MODE;rootfs 发行版: $SUITE"
+
+# --- 1. rootfs ---
+if [ ! -d "$ROOTFS/etc" ]; then
+  log "debootstrap 准备 rootfs"
+  debootstrap --variant=minbase \
+    --include=systemd,systemd-sysv,dbus,iproute2,procps \
+    "$SUITE" "$ROOTFS" "$MIRROR"
+else
+  log "rootfs 已存在,跳过 debootstrap"
+fi
+
+# --- 2. nspawn 配置 + 启动 ---
+log "写入 .nspawn 配置并启动 cell"
+mkdir -p /etc/systemd/nspawn
+
+write_conf() {
+  {
+    echo "[Exec]"
+    echo "Boot=yes"
+    case "$1" in
+      map) echo "PrivateUsers=pick"; echo "PrivateUsersOwnership=map" ;;
+      pick) echo "PrivateUsers=pick" ;;
+      *) echo "PrivateUsers=131072:65536" ;;
+    esac
+    echo ""
+    echo "[Network]"
+    echo "VirtualEthernet=yes"
+  } &gt;"$NSPAWN_CONF"
+}
+
+try_start() {
+  machinectl terminate "$MACHINE" 2&gt;/dev/null || true
+  sleep 1
+  machinectl start "$MACHINE" 2&gt;/dev/null || true
+  LEADER=""
+  for _ in $(seq 1 30); do
+    LEADER=$(machinectl show "$MACHINE" -p Leader --value 2&gt;/dev/null || true)
+    [ -n "$LEADER" ] &amp;&amp; [ "$LEADER" != "0" ] &amp;&amp; return 0
+    sleep 1
+  done
+  return 1
+}
+
+write_conf "$PU_MODE"
+if ! try_start; then
+  echo "以 $PU_MODE 模式启动失败,降级为显式 UID 范围(131072:65536)重试"
+  write_conf range
+  try_start || { echo "cell 启动失败"; exit 1; }
+fi
+
+READY=0
+for _ in $(seq 1 30); do
+  if machinectl shell "$MACHINE" /bin/true 2&gt;/dev/null; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+[ "$READY" -eq 1 ] ||
+  { echo "cell 在 30 秒内未就绪(machinectl shell 不通),先用 machinectl status $MACHINE 排查"; exit 1; }
+kill -0 "$LEADER" 2&gt;/dev/null ||
+  { echo "Leader $LEADER 已不存在,cell 可能已退出"; exit 1; }
+pass "cell 已启动,Leader(cell 的 systemd 在宿主侧的 PID)= $LEADER"
+
+# --- 3. 编译并注入 ---
+log "编译 injector 并从 cell 外注入 sleep"
+cc -O2 -o "$INJ" "$WORKDIR/injector.c"
+setsid "$INJ" "$LEADER" /bin/sleep 600 &amp;
+INJ_PID=$!
+sleep 1
+SLEEP_HOST_PID=$(pgrep -P "$INJ_PID" | head -1 || true)
+[ -n "${SLEEP_HOST_PID:-}" ] || { echo "注入失败:找不到 sleep 进程"; exit 1; }
+SLEEP_INNER_PID=$(awk '/^NSpid:/{print $NF}' "/proc/$SLEEP_HOST_PID/status")
+pass "sleep 已注入:宿主 PID=$SLEEP_HOST_PID,cell 内 PID=$SLEEP_INNER_PID,锚点 injector PID=$INJ_PID"
+
+# --- 4. 验证 ---
+# 检查必须走 systemd-run --pipe(无 PTY 的管道):machinectl shell 会分配
+# PTY,带横幅且按固定宽度折行,长行被截断后 grep 必然失配——用它做
+# 脚本化检查会假 FAIL(踩过的坑)。
+log "验证"
+OUT=$(systemd-run -q -M "$MACHINE" --wait --pipe /bin/ps aux 2&gt;/dev/null || true)
+if echo "$OUT" | grep -q '[s]leep 600'; then
+  pass "cell 内 ps 能看到注入的 sleep"
+else
+  echo "FAIL: cell 内 ps 看不到 sleep(systemd-run 管道输出,非 PTY 问题)"
+fi
+
+ERR=$(systemd-run -q -M "$MACHINE" --wait --pipe /bin/cat "/proc/$SLEEP_INNER_PID/environ" 2&gt;&amp;1 &gt;/dev/null || true)
+if echo "$ERR" | grep -qi 'permission denied'; then
+  pass "cell 内 root 读注入进程的 environ 被拒 —— 与 hatch daemon 的现象一致"
+else
+  echo "注意:environ 检查未得到 Permission denied,实际输出:${ERR:-(空)}"
+fi
+
+echo ""
+echo "宿主侧进程关系(锚点 → 注入进程):"
+ps -o pid,ppid,cmd -p "$INJ_PID" -p "$SLEEP_HOST_PID" || true
+echo ""
+echo "完成。进入 cell:machinectl shell $MACHINE;清理:sudo $0 clean"
+</code></pre></details>
+<details style="margin:12px 0"><summary><b>injector.c</b>（3130 字节，点击展开全文）</summary><pre style="max-height:460px;overflow:auto"><code>// injector.c — hatch「外生内住」注入方式的最小复刻。
+//
+// 原理与 hatch daemon 一致:进程先在 cell 外面被创建,打开目标(cell 的
+// systemd,即 Leader 进程)的 namespace 文件描述符,逐个 setns() 迁入,
+// 修正 root 目录,pid 命名空间靠 fork 生效,最后 exec 成目标程序。
+// 注意:全程不改凭据——注入进程保留宿主侧 uid,这正是 hatch daemon 在
+// cell 内 `ps` 可见、但 cell root 读不了它 /proc 的原因。
+//
+// 关键顺序(踩过的坑):必须在宿主视角下先把全部 ns fd 打开,再逐个
+// setns。一旦进入对方 mount namespace 并 chroot,/proc 就变成 cell 的
+// procfs,宿主 PID 在里面根本不存在,按路径再打开 ns/pid 只会 ENOENT。
+//
+// 编译: cc -O2 -o injector injector.c
+// 用法: sudo ./injector &lt;leader-pid&gt; /bin/sleep 600
+#define _GNU_SOURCE
+#include &lt;errno.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sched.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/wait.h&gt;
+#include &lt;unistd.h&gt;
+
+static void die(const char *what) {
+    fprintf(stderr, "%s: %s\n", what, strerror(errno));
+    exit(1);
+}
+
+static const struct {
+    const char *name;
+    int flag;
+} NSDEF[] = {
+    { "user", CLONE_NEWUSER },   /* 必须最先 */
+    { "ipc", CLONE_NEWIPC },
+    { "uts", CLONE_NEWUTS },
+    { "net", CLONE_NEWNET },
+    { "cgroup", CLONE_NEWCGROUP },
+    { "mnt", CLONE_NEWNS },
+    { "pid", CLONE_NEWPID },     /* 必须最后,且只对子进程生效 */
+};
+#define NNS (sizeof NSDEF / sizeof NSDEF[0])
+
+int main(int argc, char **argv) {
+    if (argc &lt; 3) {
+        fprintf(stderr, "usage: %s &lt;leader-pid&gt; &lt;cmd&gt; [args...]\n", argv[0]);
+        return 2;
+    }
+    pid_t leader = (pid_t)atoi(argv[1]);
+
+    /* 第一阶段:在宿主视角下,把目标的全部 ns fd 和 root fd 一次性打开 */
+    int fds[NNS];
+    for (size_t i = 0; i &lt; NNS; i++) {
+        char path[128];
+        snprintf(path, sizeof path, "/proc/%d/ns/%s", leader, NSDEF[i].name);
+        fds[i] = open(path, O_RDONLY | O_CLOEXEC);
+        if (fds[i] &lt; 0) die(path);
+    }
+    char rootpath[128];
+    snprintf(rootpath, sizeof rootpath, "/proc/%d/root", leader);
+    int rootfd = open(rootpath, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (rootfd &lt; 0) die("open target root");
+
+    /* 第二阶段:按序 setns(pid 之前的一个是 mnt) */
+    for (size_t i = 0; i + 1 &lt; NNS; i++) {
+        if (setns(fds[i], NSDEF[i].flag) &lt; 0) die(NSDEF[i].name);
+    }
+
+    /* 已在对方 mount namespace 内:靠预先打开的 root fd 修正根目录 */
+    if (fchdir(rootfd) &lt; 0) die("fchdir root");
+    if (chroot(".") &lt; 0) die("chroot");
+    if (chdir("/") &lt; 0) die("chdir /");
+    close(rootfd);
+
+    /* 第三阶段:setns pid 后 fork,子进程才真正进入对方 pid namespace */
+    if (setns(fds[NNS - 1], CLONE_NEWPID) &lt; 0) die("pid");
+    pid_t child = fork();
+    if (child &lt; 0) die("fork");
+    if (child &gt; 0) {
+        int st;
+        waitpid(child, &amp;st, 0);
+        return WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+    }
+
+    execvp(argv[2], &amp;argv[2]);
+    die("execvp");
+    return 1;
+}
+</code></pre></details>
+<details style="margin:12px 0"><summary><b>README.md</b>（5291 字节，点击展开全文）</summary><pre style="max-height:460px;overflow:auto"><code># 在自己的机器上复现 hatch 的两层结构
+
+目标:一台 Linux 机器上,先(可选)开一台 VM,在 VM 里用 systemd-nspawn
+起一个 cell(容器),再从 cell 外面把一个进程注入到 cell 里面运行——
+复刻 hatch 的「VM 管 cell、daemon 外生内住」结构。
+
+## 对照表
+
+| hatch 实测 | 本实验对应物 |
+|---|---|
+| 物理机 + Cloud Hypervisor | 你的机器 +(可选)QEMU / cloud-hypervisor |
+| VM(htch-runtime) | VM,或直接拿宿主当这一层 |
+| systemd-nspawn cell(machine=htch-runtime) | systemd-nspawn(machine=testcell) |
+| ve-htch-runtime veth | ve-testcell veth |
+| control-daemon.sh 外层 exec daemon | injector.c 从外层注入 sleep |
+| daemon 在 cell 内可见、cell root 读不了其 /proc | 注入的 sleep 同样如此(见验证 4) |
+| 用户映射 uid 131072 起 | --private-users=pick 的映射段 |
+
+## 环境要求
+
+- 一台 Linux(物理机或 VM 均可),systemd ≥ 250,有 root/sudo
+- 只有最外层 VM 需要 /dev/kvm;里面的 nspawn 共用内核,不需要嵌套虚拟化
+
+## Ubuntu 一键脚本(推荐)
+
+Ubuntu 宿主直接用包里的 `ubuntu-repro.sh`,下面的手动步骤它全包了。
+PrivateUsers 参数它不死看版本号,而是探测 `systemd-nspawn --help`
+实际支持的选项再选,并带启动失败自动降级:优先 hatch 同款的
+`pick + ownership=map`,不行就退到显式范围 `131072:65536`。
+注意 Ubuntu 22.04 的 systemd 虽然号称 249,但其官方手册确认
+`--private-users=pick` 与 `--private-users-ownership=` 都已回补,
+所以 22.04 也能直接用 hatch 同款参数。
+
+```bash
+sudo apt install systemd-container debootstrap build-essential
+sudo ./ubuntu-repro.sh          # 备 rootfs → 起 cell → 注入 sleep → 跑验证清单
+sudo ./ubuntu-repro.sh clean    # 清理
+```
+
+注意:Ubuntu 的 `machinectl`/`systemd-nspawn` 在 `systemd-container`
+包里,不装会找不到命令。rootfs 默认用宿主自己的 Ubuntu 版本,
+`SUITE=bookworm MIRROR=https://deb.debian.org/debian` 可换 Debian。
+脚本跑完会逐条打印 PASS,对应第 4 步验证清单。
+
+## 第 0 步(可选):外层 VM
+
+只为完整复刻两层时才需要。QEMU 最简形态(cloud-hypervisor 同理,
+换成 `cloud-hypervisor --kernel ... --disk path=...`):
+
+```bash
+qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
+  -hda ubuntu-cloud.img -nographic -nic user,hostfwd=tcp::2222-:22
+```
+
+ssh 进 VM 后,下面的步骤与在裸机上完全相同。
+
+## 第 1 步:准备 cell 的根文件系统
+
+```bash
+sudo apt install debootstrap        # Debian/Ubuntu 宿主;或 dnf install debootstrap
+sudo debootstrap --variant=minbase --include=systemd,systemd-sysv,dbus,iproute2 \
+  bookworm /var/lib/machines/testcell https://deb.debian.org/debian
+```
+
+minbase 必须显式带上 systemd:nspawn --boot 需要 cell 里有自己的 init。
+
+## 第 2 步:启动 cell
+
+前台调试形态(等价于 hatch 宿主侧的启动命令):
+
+```bash
+sudo systemd-nspawn --boot --machine=testcell \
+  --directory=/var/lib/machines/testcell \
+  --private-users=pick --network-veth --keep-unit
+```
+
+- systemd ≥ 256 可以换 hatch 同款:`--private-users-ownership=map`
+- `--network-veth` 会生成 `ve-testcell` 网卡,和 hatch 的 `ve-htch-runtime` 对应
+- 正式常驻用服务形态:`sudo machinectl start testcell`
+
+## 第 3 步:三种「从外面进去」的方式
+
+先拿到 cell 的 Leader PID(cell 内 systemd 在宿主侧的 PID):
+
+```bash
+LEADER=$(machinectl show testcell -p Leader --value)
+```
+
+1. **API 正道**(machined 代劳):`sudo machinectl shell testcell`
+   或 `sudo systemd-run --machine=testcell -t /bin/bash`
+2. **nsenter**(hatch 的 post-start.sh 给脚本用的方式):
+
+   ```bash
+   sudo nsenter --target $LEADER --all /bin/bash
+   ```
+
+   注意不要加 `-F/--no-fork`:进入 PID 命名空间必须 fork 才生效。
+3. **setns 自注入**(hatch 的 daemon 本体方式,本目录 injector.c):
+
+   ```bash
+   cc -O2 -o injector injector.c
+   sudo ./injector $LEADER /bin/sleep 600
+   ```
+
+   注入器留在宿主侧当前台锚点(对应 systemd MainPID),sleep 在 cell 里跑。
+
+## 第 4 步:验证清单(逐条对应 hatch 的实测现象)
+
+1. 宿主 `machinectl list` 能看到 testcell;`machinectl status testcell`
+   能看到 Leader 和控制组
+2. cell 内(`machinectl shell testcell` 后)`ps aux`:只有 cell 自己的
+   进程,systemd 是 PID 1;`cat /proc/self/uid_map` 能看到映射段
+3. 注入后在 cell 内 `ps aux | grep sleep`:sleep 出现,PID 是 cell 内编号
+4. **关键现象**:cell 内以 root 身份读注入进程的敏感 /proc 项:
+
+   ```bash
+   cat /proc/&lt;sleep在cell内的PID&gt;/environ   # 期望 Permission denied 或属主异常
+   ls -la /proc/ | grep &lt;PID&gt;                # 属主显示为映射外的 uid(常见 65534/nobody)
+   ```
+
+   原因:injector 全程没改凭据,sleep 的 uid 仍是宿主侧的,在 cell 的
+   用户映射里没有对应位置——这正是 hatch daemon 在 cell 内读不了的机理
+5. 宿主侧 `ps -o pid,ppid,cmd -p &lt;sleep在宿主侧的PID&gt;`:父进程是
+   injector(锚点),对应 hatch 的「宿主父进程留作 systemd MainPID」
+6. `ip link` 在宿主能看到 `ve-testcell`,cell 内只有 lo + host0
+
+## 清理
+
+```bash
+sudo machinectl terminate testcell
+sudo rm -rf /var/lib/machines/testcell
+```
+</code></pre></details>
+</section><section class="card" id="flow"><div class="eyebrow">09 / 原报告机制整理</div>
+<h2>完整交互逻辑</h2>
+<p class="kv">本节是消息进入 daemon 之后的工具循环；消息如何先到达 daemon，见第 6 节的五跳链路。</p>
+<ol>
+<li><b>入站：</b>用户消息经 Meta 后端 → yolk/ingress 在 veth host 侧接住 → 经共享 tmpfs <code>/run/hatch</code> 的 unix socket 送进 Cell（主口 <code>sandbox-api/api.sock</code>，另有 <code>noded/control.sock</code>、<code>noded/http-api.sock</code>）。</li>
+<li><b>承接：</b>hatch daemon 承接会话，从 Postgres 取 transcript、从持久盘取 home/记忆/技能，组装上下文。</li>
+<li><b>推理：</b>经 <code>sandbox/space-inference.sock</code> → inference 代理 → egress 代理 :3128 → VM 外模型服务。Cell 内没有模型进程：daemon 40 分钟仅约 32 秒 CPU、约 200MB 内存。</li>
+<li><b>工具分发（Agent Loop 执行面在 daemon）：</b>模型返回 tool call 后 daemon 分发——shell 给 execd；连接器/服务 CLI 走各自 privsep socket；浏览器由外层 browser-broker 路由到单独租用的 Browser VM；搜索走 <code>space-web-search.sock</code>，媒体走 <code>space-media.sock</code>，特权操作走 <code>space-privileged.sock</code>。</li>
+<li><b>循环与回程：</b>工具结果回 daemon → 再送推理 → 直到产出最终回复，原路返回用户。旁证：有 ws-client 可对 daemon 发 chat-send 并取最终回复，且 daemon CPU 随对话增长——所以 loop 的<strong>执行面</strong>在 daemon，<strong>推理面</strong>在 Cell 外；编排状态是否同步在后端，从 Cell 内无法证实。</li>
+<li><b>后台工作：</b>定时任务在外层 cron-store，到点经同一 socket 链路唤醒 daemon；子代理由 daemon 在同一 Cell 内调度，工作区落在 <code>~/workspace/agents/</code>。</li>
+</ol>
+<h3>Cell 内的 socket 一览（/run/hatch）</h3>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>Socket</th><th>用途</th></tr>
+<tr><td><code>sandbox-api/api.sock</code></td><td>入站请求进 Cell 的主口</td></tr>
+<tr><td><code>sandbox/space-inference.sock</code></td><td>推理转发</td></tr>
+<tr><td><code>sandbox/space-web-search.sock</code> / <code>space-media.sock</code> / <code>space-privileged.sock</code></td><td>网页搜索 / 媒体生成 / 特权操作</td></tr>
+<tr><td><code>exec/execd.sock</code> · <code>peerd/api.sock</code> · <code>noded/control.sock</code></td><td>命令执行 / 对等服务 / 节点控制面</td></tr>
+<tr><td><code>cron-store/control.sock</code> · <code>safety/security.sock</code> · <code>telemetry/telemetry.sock</code> · <code>gk-proxy/gk.sock</code> · <code>postgres/.s.PGSQL.5432</code></td><td>定时 / 安全 / 遥测 / 网关代理 / 数据库（均在外层）</td></tr>
+</table></div>
+</section><section class="card" id="proc"><div class="eyebrow">10 / 原报告机制整理</div>
+<h2>Hatch 各进程是干什么的</h2>
+<h3>Cell 内（guest 里能直接看到的只有两个常驻进程）</h3>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>进程</th><th>职责</th><th>实测</th></tr>
+<tr><td><code>hatch daemon</code></td><td>会话与工具调度中枢：承接 api.sock 入站、维护 agent loop 执行面、分发工具、回传结果；兼管 auth/telemetry 的 guest 侧锚点</td><td>当前代 PID 24，<code>--runtime-cell-leader=2168</code>，PPID=0（由宿主侧 anchor 进程 setns 放进 Cell，见 4.2）；PID 与 leader 均随代次变化</td></tr>
+<tr><td><code>hatch-execd</code></td><td>命令执行服务：所有 shell/bash 都由它派生</td><td>当前代 PID 748，随代次变化；监听 fd 由宿主 systemd 经 LISTEN_FDS 传入（见 4.2）</td></tr>
+<tr><td>Chromium（按需）</td><td>浏览器任务时才拉起，本体在 <code>/opt/meta-chromium</code>（667M）；复杂浏览器会话实际由外层 broker 路由到独立 Browser VM</td><td>空闲时无进程</td></tr>
+</table></div>
+<h3>VM 外层（从脚本、socket 属主与 bin 推断）</h3>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>组件</th><th>职责</th></tr>
+<tr><td>spawnd</td><td>装配 Cell：渲染 runtime-cell 脚本、排队 bootstrap 阶段、挂载 host 侧 tc 限流</td></tr>
+<tr><td>cell leader（当前代 2168，随代次变化）</td><td>即 Cell 的 PID 1（guest systemd）在宿主侧的 PID；拉起并管理本 Cell，machinectl 以它确认 Cell 就绪；宿主持有它即持有进入 Cell 各 namespace 的句柄</td></tr>
+<tr><td>yolk / ingress + ingress-rev-proxy</td><td>终止外部流量、draining 摘流；guest 内无此进程</td></tr>
+<tr><td>noded / peerd</td><td>节点控制面与对等服务，socket 在 /run/hatch 下由外层持有</td></tr>
+<tr><td>hatch-healthd</td><td>盯 daemon / vault 健康</td></tr>
+<tr><td>authdc + hatch-vault</td><td>认证与凭据保险箱；凭据不进 Cell 明文</td></tr>
+<tr><td>browser-broker / browser-service</td><td>浏览器会话的路由与租用</td></tr>
+<tr><td>Postgres / cron-store / telemetry</td><td>会话状态持久化 / 定时调度 / 遥测汇聚</td></tr>
+</table></div>
+<div class="note"><b>活例子——Cell 换代（2026-10-14 13:15 实测）：</b>就在本文档整理期间，这个 Cell 换过一代：daemon 从 PID 22 变成 24，leader 参数从 2171 变成 2168，execd 也从上一代（PID 744）换成当前代的 748。对话全程无感续上——这正是“Cell 可销毁重建、状态在外面（Postgres + 持久盘）”的一次现场验证。本文所有 PID / leader 数字都应读作<strong>当前代数值、随代次变化</strong>，不要当成固定常量。</div>
+<p class="kv">注：<code>/opt/hatch/bin</code> 的 101 个可执行文件里，有一大批是同一个 multicall 二进制按 argv[0] 名字分发的工具 CLI（instagram-cli、meta-ads-cli、facebook-cli、threads-cli、slack、spotify-api、stripe、notion-cli、hatch_gws_cli、tts、web-search、geocode、media-generation、remote-storage、image-search 等），不是 101 个独立服务。</p>
+</section><section class="card" id="opt"><div class="eyebrow">11 / 原报告机制整理</div>
+<h2>/opt/hatch 构成（平台预装，只读，随版本更新）</h2>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<tr><th>目录</th><th>大小 / 数量</th><th>内容</th></tr>
+<tr><td><code>bin/</code></td><td>1.6G · 101 个</td><td>主程序 <code>hatch</code> 443M（464,274,720 字节，x86-64 stripped ELF，SHA256 <code>ed2dcf12…f94e8bca</code>，构建 2026-10-13T22:18:23Z）+ execd / healthd / vault / rescue / spawnd + 各平台 CLI</td></tr>
+<tr><td><code>skills/</code></td><td>166M · 86 个</td><td>内置 skill 的 SKILL.md 与脚本：gmail、google-calendar、shopping、booking、meta-ads、spotify、stripe、github、notion、slack、travel-planning、tts、podcast、skill-creator 等</td></tr>
+<tr><td><code>connectors/</code></td><td>942K · 63 个</td><td>连接器定义：gmail、google_*、outlook_*、slack、spotify、plaid、shopify、zoom、todoist、linear 等</td></tr>
+<tr><td><code>workflow-skills/</code></td><td>8.5M · 53 个</td><td>流程型 skill：flight-booking、restaurant-reservations、email-management、trip-planning、scheduling、wide-research 等</td></tr>
+<tr><td><code>runtime-cell/</code></td><td>228K · 25 文件</td><td>启动链 <code>runtime-cell-entry.sh → launch-daemon.sh → run-daemon.sh</code>（launch 的核心是 systemd-nspawn --boot 拉起 Cell，见 4.1；<code>control-execd.sh</code> 注释写明 execd 的 setns / anchor 模式，见 4.2）；<code>ensure-rootfs.sh</code>（950+ 行）管 rootfs；四份权限配置 <code>bin-scopes.conf / connector-scopes.conf / skill-scopes.conf / workflow-skill-scopes.conf</code> 定义每个组件能碰什么；<code>guest.env</code> 含 Jarvis 代号与 egress 代理地址</td></tr>
+<tr><td><code>assets/</code></td><td>92M</td><td>artifacts / ideas / blocklist 静态资源</td></tr>
+</table></div>
+<p>同级还有 <code>/opt/meta-chromium</code> 667M、<code>/opt/hatch-image</code> 91M、空目录 <code>/opt/muse</code>。对比：能持久保留的只有 <code>/home/hatch</code>（约 882M）；/opt 随镜像走，VM 替换时不保留修改。</p>
+<div class="note"><b>关于“把 hatch 发给我”：</b>主程序是平台编译后的专有二进制，不外发；可分享的是周边文本：runtime-cell 全部脚本 + 四份 scopes 配置（已打包，70KB）。这也是本文档多数外层结论的来源。</div>
+</section><section class="card" id="usage"><div class="eyebrow">12 / 原报告机制整理</div>
+<h2>怎么用 / 怎么观察这套系统</h2>
+<div class="grid">
+<div class="mini"><b>作为用户</b><br/>你不需要碰 Cell：发消息即可，daemon 自动完成上下文组装、推理与工具循环。定时任务、子代理、侧边聊天都复用同一个 Cell 与 home；换设备/VM 重建后，靠外层 Postgres + 持久盘恢复。</div>
+<div class="mini"><b>在 Cell 内观察进程</b><br/><code>ps aux</code> 只看得到 daemon / execd；外层进程看不到属主是设计使然，不是故障。</div>
+<div class="mini"><b>看 socket 与网络</b><br/><code>ss -xlnp</code> 看 /run/hatch 下的监听（属主为空 = 外层持有）；<code>ss -tlnp</code> 应为空——无 TCP 监听是正常状态。</div>
+</div>
+<pre># 常用只读观察命令（Cell 内）
+ps aux | grep hatch            # daemon(PID 24) + execd(PID 748)，当前代，随代次变化
+ss -xlnp                        # unix socket 监听面
+ls /run/hatch/                  # sandbox-api / sandbox / noded / peerd / exec ...
+cat /opt/hatch/runtime-cell/guest.env
+/opt/hatch/bin/hatch --version  # 0.1.0 (e673ca8c3ce)
+journalctl -u ...               # 元数据级日志（内容面不在 guest）</pre>
+<h3>证据边界（诚实标注）</h3>
+<ul>
+<li><b>实测：</b>进程、socket、端口、/opt 目录、版本号、ptrace/proc 拦截结果、网卡与 DMI。</li>
+<li><b>脚本明文：</b>Cell 生命周期与创建链（ensure-rootfs 的 UID 修正与 .incoming 原子换入、pre-start 挂载与 scoped skills overlay、launch-daemon 的 nspawn --boot 命令、runtime-cell.ready 就绪轮询）、外层进入 Cell 的三种方式（nsenter、execd 的 setns + anchor 模式、LISTEN_FDS socket 激活）、draining、tc 在 host 侧、cell-root-forgeable、egress 代理地址。</li>
+<li><b>脚本明文（本版新增）：</b>VM 单租户写死——control-daemon.sh 只管单个 daemon 且标记为单例文件、machine / veth / rootfs / JARVIS_HOME 全为常量、stop.sh 中 Postgres（postgresql@18-hatch.service）与 Cell 同停、脚本由 spawnd 部署时渲染；消息链路中 ingress 在 veth HOST 侧终止与 draining 摘流标记。</li>
+<li><b>本地复现（第 7、8 节）：</b>namespaces / cgroups 的隔离边界为 Linux 通用机制；第 8 节三份脚本为 hatch-cell-repro v4 实验包全文（与已分发的 hatch-cell-repro-v4-ubuntu.tar.gz 内文件逐字一致），其验证结果为用户在 Ubuntu 22.04 （systemd 249）本机实跑记录：sleep 宿主 PID 39033 / Cell 内 PID 39、属主 nobody。</li>
+<li><b>推测（无官方架构文档）：</b>agent loop 编排状态是否也同步在 Meta 后端、宿主机上具体哪个进程 accept api.sock、peerd / noded 与后端之间的常驻中继通道形态、后端按会话定位 VM 的内部路由——这些从 Cell 内不可证实，本文按可见结构给出最合理推断并在此标注（第 6 节逐跳标注了证据等级）。</li>
+</ul>
+</section></main><footer><a href="index.html#references">← 返回研究资料首页</a><p>用户材料整理 · 2026-10-14 · 原文件保留，本次未重新进行运行时验收。</p><div class="source">Hatch 运行时架构整理 · 基于 2026-10-14 对本机（Cell 内视角）的实地观察整理 · /opt 为平台镜像内容，版本随构建更新（当前构建 2026-10-13）</div></footer><dialog aria-labelledby="dialog-title" id="diagram-dialog"><div class="dialog-heading"><h2 id="dialog-title">Hatch 运行时嵌套结构</h2><button id="close-diagram" type="button">关闭</button></div><div class="svg-scroll"><svg aria-label="原报告的物理宿主、Cloud Hypervisor VM、外层服务与 nspawn Cell 嵌套结构" role="img" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px" viewbox="0 0 1000 560" width="100%">
+<rect fill="#fff" height="540" rx="16" stroke="#a0aa92" stroke-width="2" width="980" x="10" y="10"></rect>
+<text font-size="15" font-weight="700" x="28" y="38">物理宿主机 · KVM</text>
+<rect fill="#edf1e5" height="478" rx="14" stroke="#687951" stroke-width="2" width="944" x="28" y="52"></rect>
+<text font-size="15" font-weight="700" x="46" y="78">Cloud Hypervisor (VMM, Rust / rust-vmm) — 创建并运行这台 VM</text>
+<text fill="#6b7462" font-size="12" x="46" y="98">DMI = Cloud Hypervisor · 仅 virtio 半虚拟化 · 无 legacy BIOS 设备模拟</text>
+<rect fill="#fff" height="398" rx="12" stroke="#293023" stroke-width="1.5" width="908" x="46" y="112"></rect>
+<text font-size="14" font-weight="700" x="64" y="138">VM 外层（Cell 之外，同一 Hypervisor 内）— Harness 宿主侧</text>
+<g font-size="12">
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="64" y="152"></rect><text x="76" y="175">yolk / ingress</text><text fill="#6b7462" x="76" y="193">veth host 侧接流量</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="248" y="152"></rect><text x="260" y="175">spawnd + cell leader</text><text fill="#6b7462" x="260" y="193">leader=2168 · 当前代</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="170" x="432" y="152"></rect><text x="444" y="175">noded / peerd</text><text fill="#6b7462" x="444" y="193">control.sock / api.sock</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="150" x="616" y="152"></rect><text x="628" y="175">Postgres</text><text fill="#6b7462" x="628" y="193">会话 / 状态</text>
+<rect fill="#f4ede5" height="54" rx="8" stroke="#b88b60" width="156" x="780" y="152"></rect><text x="792" y="175">egress proxy :3128</text><text fill="#6b7462" x="792" y="193">出站唯一通道</text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="64" y="218"></rect><text font-size="11" x="76" y="243"><tspan x="76" y="235">inference proxy → </tspan><tspan x="76" y="250">模型服务（VM 外）</tspan></text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="248" y="218"></rect><text font-size="11" x="260" y="243"><tspan x="260" y="235">cron-store / telemetry </tspan><tspan x="260" y="250">/ safety / vault / authd</tspan></text>
+<rect fill="#e9ece2" height="42" rx="8" stroke="#7c886e" width="170" x="432" y="218"></rect><text font-size="11" x="444" y="243"><tspan x="444" y="235">browser-broker → </tspan><tspan x="444" y="250">独立 Browser VM</tspan></text>
+<rect fill="#f3f3ec" height="42" rx="8" stroke="#79826f" width="320" x="616" y="218"></rect><text x="628" y="243">/run/hatch/ 共享 tmpfs — 所有 unix socket 的交汇点</text>
+</g>
+<rect fill="#f0f3e8" height="208" rx="12" stroke="#526742" stroke-width="2" width="872" x="64" y="282"></rect>
+<text font-size="14" font-weight="700" x="82" y="308">Cell = htch-runtime（systemd-nspawn · 独立 PID / mount / user namespace · 2 核 / 8GB）</text>
+<g font-size="12">
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="82" y="324"></rect><text font-weight="700" x="94" y="348">hatch daemon · PID 24</text><text fill="#6b7462" x="94" y="366">会话承接 + 工具调度 · 当前代</text><text fill="#6b7462" x="94" y="380">PPID=0 · ~194MB · 14 线程</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="298" y="324"></rect><text font-weight="700" x="310" y="348">hatch-execd · PID 748</text><text fill="#6b7462" x="310" y="366">执行 shell 命令 · 当前代</text><text fill="#6b7462" x="310" y="380">bash 进程都由它派生</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="200" x="514" y="324"></rect><text font-weight="700" x="526" y="348">工具 CLI × 101</text><text fill="#6b7462" x="526" y="366">/opt/hatch/bin/*</text><text fill="#6b7462" x="526" y="380">多为 multicall 按名分发</text>
+<rect fill="#fff" height="64" rx="8" stroke="#526742" width="188" x="730" y="324"></rect><text font-weight="700" x="742" y="348">Chromium（按需）</text><text fill="#6b7462" x="742" y="366">/opt/meta-chromium</text><text fill="#6b7462" x="742" y="380">平时不运行</text>
+<rect fill="#fff" height="62" rx="8" stroke="#a0aa92" width="410" x="82" y="404"></rect><text x="94" y="428">网卡 host0：198.19.0.2/30 → 对端 .1 在外层</text><text fill="#6b7462" x="94" y="448">入站不走 guest 网络栈 · ss 无 TCP 监听</text>
+<rect fill="#fff" height="62" rx="8" stroke="#a0aa92" width="410" x="508" y="404"></rect><text x="520" y="428">/home/hatch 持久盘：/dev/mapper/rv (btrfs)</text><text fill="#6b7462" x="520" y="448">根盘 overlay 临时 · home 独立持久</text>
+</g>
+</svg></div><p class="source">原报告观察快照；PID、目录大小与实例配置随版本和 Cell 代次变化。</p></dialog></div></div><script>(()=>{const dialog=document.getElementById('diagram-dialog');document.getElementById('open-diagram').addEventListener('click',()=>dialog.showModal());document.getElementById('close-diagram').addEventListener('click',()=>dialog.close());})();</script><script id="doc-sidebar-script">
+(() => {
+  const nav = document.querySelector('.doc-sidebar');
+  if (!nav) return;
+  const links = [...nav.querySelectorAll('.doc-links a')];
+  const targets = links.map(a => document.getElementById(a.hash.slice(1)));
+  function activate(id) {
+    links.forEach(a => {
+      if (a.hash === '#' + id) a.setAttribute('aria-current','location');
+      else a.removeAttribute('aria-current');
+    });
+  }
+  function jumpToSection(event, link, target) {
+    // Use the original slideshow controls so a hidden slide can be selected.
+    if (document.body.classList.contains('present') && typeof move === 'function') {
+      event.preventDefault();
+      const slides = [...document.querySelectorAll('main section')];
+      const next = slides.indexOf(target);
+      const previous = slides.findIndex(s => s.classList.contains('current'));
+      if (next >= 0) move(next - Math.max(previous,0));
+      history.replaceState(null,'',link.hash);
+    }
+    activate(target.id);
+  }
+  links.forEach((link,index) => link.addEventListener('click',event =>
+    jumpToSection(event,link,targets[index])));
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) if (entry.isIntersecting) activate(entry.target.id);
+  }, {rootMargin:'-10% 0px -60% 0px'});
+  targets.filter(Boolean).forEach(target => observer.observe(target));
+  activate(location.hash.slice(1) || targets[0]?.id);
+})();
+</script></body></html>

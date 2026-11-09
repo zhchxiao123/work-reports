@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发出消息：一条消息怎么只算一次 · ByClaw 新数据流</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  body { padding-right: 24px; }
+  .mini { max-width: 960px; margin: 0 auto; }
+  .tldr { margin-top: 14px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+  .lead b, .sub b { color: var(--slate); }
+  section { margin-top: 42px; }
+  .srcline { margin-top: 24px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
+  td code { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="mini">
+  <a class="doc-home" href="byclaw-durable-roadmap.html#p5">← 返回规划：一轮对话的新数据流</a>
+
+  <header>
+    <div class="eyebrow">新数据流 · 第 1 步详解</div>
+    <h1>发出消息：一条消息怎么只算一次</h1>
+    <p class="lead">ByClaw 已经有 trace id，不需要再造一个贯穿全链路的新编号。缺的是两件事：把现有编号接到 DSH 已有的去重上，以及宿主重启后有人把这条命令接起来。</p>
+    <div class="tldr"><b>结论</b>：trace id 足够标识“这一轮”，BE 之后全程用它，宿主再把 messageId 作为 DSH 的 rpcId，重投时不会多开一轮。它防不了到达 BE 之前的重复，这一段用前端已有的 clientRequestId；同一提问的多次回答用 interaction_id；工具调用用 DSH 的 callId。</div>
+  </header>
+
+  <section id="n1">
+    <h2><span class="n">01</span>现有的编号各管什么</h2>
+    <p class="sub">这些编号都已经有了，不需要新增。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:20%">编号</th><th style="width:20%">谁生成</th><th style="width:27%">标识什么</th><th>在新流程里的用途</th></tr>
+        <tr><td><code>clientRequestId</code></td><td>前端，每次发送新生成</td><td>用户的一次发送动作</td><td>BE 入口去重。用户手动再发一次是新的编号，算新消息，这是对的</td></tr>
+        <tr><td><code>trace id</code></td><td>BE，由用户消息 ID 和回答消息 ID 编码而成</td><td>这一轮对话</td><td>账本里“这一轮”的键；断线找回、停止都用它</td></tr>
+        <tr><td><code>messageId</code>（回答消息 ID）</td><td>BE</td><td>这一轮的回答</td><td>命令重投时不变，by-framework 已按它跳过已结束的执行。同时作为 DSH 的 <code>rpcId</code>，DSH 查日志去重，重启后仍有效</td></tr>
+        <tr><td><code>interaction_id</code></td><td>宿主，发起提问时</td><td>一次“等你回答”</td><td>回答去重：第一份生效。同一轮的多次回答共用 trace id，不能靠 trace id 区分</td></tr>
+        <tr><td><code>callId</code></td><td>DSH，模型发起工具调用时</td><td>一次工具调用</td><td>传给自有工具作幂等键。只在宿主和工具之间用，不穿过 BE 和 Redis</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="n2">
+    <h2><span class="n">02</span>现在和以后差在哪</h2>
+    <p class="sub">前半段几乎不变，改动集中在宿主收到命令之后。图中是阶段 3 的形态：<b>写进日志和索引就确认命令</b>。在此之前（阶段 2）命令仍等这一轮结束才确认，正好给续跑器当待办清单。</p>
+    <figure>
+      <svg class="rf" viewBox="0 0 860 372" role="img" aria-label="新流程时序：前端发送带 clientRequestId 的消息，BE 分配 trace id 并写入 Redis 命令流，宿主读取后在一次提交里把输入和本轮写入账本，随后确认命令并开始执行；重投时账本发现已有这一轮直接确认">
+        <text x="80" y="20" text-anchor="middle" style="font-weight:600">前端</text><text x="270" y="20" text-anchor="middle" style="font-weight:600">BE</text><text x="460" y="20" text-anchor="middle" style="font-weight:600">Redis 命令流</text><text x="640" y="20" text-anchor="middle" style="font-weight:600">宿主</text><text x="790" y="20" text-anchor="middle" style="font-weight:600">账本</text>
+        <g class="ln"><line x1="80" y1="30" x2="80" y2="360"/><line x1="270" y1="30" x2="270" y2="360"/><line x1="460" y1="30" x2="460" y2="360"/><line x1="640" y1="30" x2="640" y2="360"/><line x1="790" y1="30" x2="790" y2="360"/></g>
+        <rect class="box-d" x="90" y="42" width="170" height="24" rx="5"/><text x="175" y="59" text-anchor="middle" class="lab">① 消息 + clientRequestId</text>
+        <rect class="box-d" x="182" y="76" width="176" height="24" rx="5"/><text x="270" y="93" text-anchor="middle" class="lab">② 分配 ID，生成 trace id</text>
+        <rect class="box-d" x="280" y="110" width="170" height="24" rx="5"/><text x="365" y="127" text-anchor="middle" class="lab">③ 写入命令（带 trace id）</text>
+        <rect class="box-d" x="470" y="144" width="160" height="24" rx="5"/><text x="550" y="161" text-anchor="middle" class="lab">④ 读取命令</text>
+        <rect class="box-ok" x="650" y="178" width="130" height="44" rx="5"/><text x="715" y="196" text-anchor="middle" class="lab" style="font-weight:600">⑤ 落账本</text><text x="715" y="212" text-anchor="middle" class="tiny">DSH 日志 + 绑定 + 索引</text>
+        <rect class="box-x" x="470" y="232" width="160" height="24" rx="5"/><text x="550" y="249" text-anchor="middle" class="lab" style="font-weight:600">⑥ 提交成功才确认命令</text>
+        <rect class="box-d" x="552" y="266" width="176" height="24" rx="5"/><text x="640" y="283" text-anchor="middle" class="lab">⑦ 开始执行</text>
+        <rect class="box" x="370" y="302" width="400" height="44" rx="6" style="stroke-dasharray:5 4"/><text x="570" y="320" text-anchor="middle" class="lab">重投时：DSH 认得这个 rpcId → 不再开一轮，直接确认</text><text x="570" y="336" text-anchor="middle" class="tiny">已落账本但没来得及确认就崩溃，走的就是这条路</text>
+      </svg>
+      <figcaption><b>为什么第 ⑥ 步放在阶段 3</b>：现在命令要等这一轮跑完才确认，宿主一重启就卡住。阶段 2 不动确认时机，而是让续跑器在启动时扫描这些命令，不用加新存储。阶段 3 有了索引，命令才可以只负责“送达”，这样 Redis 丢了也不影响。</figcaption>
+    </figure>
+  </section>
+
+  <section id="n3">
+    <h2><span class="n">03</span>出问题时怎么走</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:30%">情况</th><th style="width:33%">现在</th><th>以后</th></tr>
+        <tr><td>写入 Redis 后、开始处理前宿主崩溃</td><td class="col-old">命令卡在待确认列表，新进程同名，不会重新领取；一直转圈</td><td>续跑器扫描到这条命令，日志里没有绑定记录，按新命令处理</td></tr>
+        <tr><td>写入日志后、确认前宿主崩溃</td><td class="col-old">没有这一步</td><td>续跑器发现已有绑定记录，按日志判断接下来怎么做，<code>rpcId</code> 保证不多开一轮</td></tr>
+        <tr><td>执行到一半宿主崩溃</td><td class="col-old">同样一直转圈；DSH 只在有人打开会话时才补上中断结尾，不会继续</td><td>续跑器打开会话，这一轮被标记为中断；按策略续跑或明确失败。未完成的工具交给模型判断</td></tr>
+        <tr><td>同一提问的回答提交三次</td><td class="col-old">多余的恢复命令失败，可能让这一轮被提前收尾</td><td>按 interaction_id 匹配，第一份生效，其余返回“已收到”，不发结束事件</td></tr>
+        <tr><td>用户看不到回复，手动再发</td><td class="col-old">新的 clientRequestId 和 messageId；这一轮还在跑时，多数被“会话运行中”挡回</td><td>不变。这是用户的新动作，不应被当成重复</td></tr>
+        <tr><td>发送时断线</td><td class="col-old">前端最多等 10 秒重连，失败就把这条回答标为取消，不自动重发</td><td>不变。以后如果加自动重发，必须先做下一节的入口去重</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="n4">
+    <h2><span class="n">04</span>要改什么</h2>
+    <div class="g3">
+      <div class="card"><h3>阶段 0</h3><div class="tag">不改架构</div><p>宿主启动时扫描上一代遗留的命令，明确报失败并确认。接上 <code>rpcId</code>。已消费的提问回答当作重复处理，不发结束事件。</p></div>
+      <div class="card"><h3>阶段 2 和 3</h3><div class="tag">续跑与索引</div><p>阶段 2 写绑定记录，续跑器接上遗留命令。阶段 3 写入索引后就确认命令，确认时机从“跑完”提前到“收下”。</p></div>
+      <div class="card"><h3>按需</h3><div class="tag">加自动重发时再做</div><p>BE 入口按“会话 + clientRequestId”记下已分配的 trace id，同一帧再来就返回原来那一轮。现在没有自动重发，不急。</p></div>
+    </div>
+    <div class="note">
+      <h2>还没确认的</h2>
+      <ul>
+        <li>钉钉等第三方渠道进来的消息有没有稳定的 clientRequestId，是否会重复投递。</li>
+        <li>前端帧已发出、BE 没收到时，前端是否有超时提示。</li>
+        <li>用户消息是 BE 内存队列约 500 毫秒批量入库，和命令写入 Redis 的先后关系；BE 恰好在这时崩溃，可能出现有命令、没有用户消息的情况（推断）。</li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="srcline">依据 ByClaw D0.6.0（57326a580）和 DSH master ce7073d512 的代码，均未运行。DSH 的 rpcId 目前由其 Web 接口使用，宿主入口接入时要核实调用方式。</p>
+</div>
+</body>
+</html>

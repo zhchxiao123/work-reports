@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ByClaw 首 token 链路梳理（D0.6.0）</title>
+<!--
+  汇报型单页模版 · briefing-deck
+  左侧目录 + 正文连续滚动 + 右侧标注画笔。零外部依赖,直接用浏览器打开。
+  改法:1) 换 .brand 标题  2) 换 nav.toc 条目(data-sec 要和 section id 一致)
+        3) 按骨架填 section 内容  4) 图号在 .fig-h 里按正文顺序手工排
+  配色语义:box-d 中性/过去 · box-ok 已落地 · box-x 重点/缺口 · 虚线 未落地
+-->
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 24px 96px;
+  }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+
+  .sheet {
+    max-width: 1300px; margin: 0 auto;
+    display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px;
+    align-items: start;
+  }
+
+  /* ── 左侧导航 ─────────────────────────── */
+  .sidenav { position: sticky; top: 28px; }
+
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--clay); margin-bottom: 7px;
+  }
+  .brand-title {
+    font-family: var(--serif); font-weight: 500; font-size: 17px;
+    line-height: 1.4; letter-spacing: -0.01em; color: var(--slate);
+  }
+  .brand-sub {
+    margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500);
+  }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    font-size: 12px; color: var(--gray-500); text-decoration: none;
+    padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px;
+    display: flex; align-items: baseline; gap: 7px; line-height: 1.4;
+    transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+
+  .navhint {
+    margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150);
+    font-size: 10px; line-height: 1.6; color: var(--gray-500);
+  }
+  .navhint kbd {
+    font-family: var(--mono); font-size: 10px; background: var(--gray-150);
+    border: 1px solid var(--gray-300); border-radius: 4px; padding: 1px 4px;
+  }
+
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand { margin-bottom: 16px; padding-bottom: 16px; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+
+  .view { display: none; }
+  .view.on { display: block; }
+
+  /* ── 通用排版 ─────────────────────────── */
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: 33px;
+    letter-spacing: -0.01em; margin-bottom: 12px;
+  }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code {
+    font-family: var(--mono); font-size: 0.88em;
+    background: var(--gray-150); padding: 1px 5px; border-radius: 4px;
+  }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub {
+    font-size: 13.5px; color: var(--gray-700); line-height: 1.7;
+    max-width: 830px; margin-bottom: 22px;
+  }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+
+  /* ── 论点块 ───────────────────────────── */
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--clay); margin-bottom: 14px;
+  }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  .thesis.light { background: #fff; color: var(--slate); border: 1.5px solid var(--gray-300); }
+  .thesis.light p { color: var(--gray-700); }
+  .thesis.light strong { color: var(--slate); }
+  .thesis.light code { background: var(--gray-150); color: var(--rust); }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+
+  .bridge {
+    margin: 42px 0 -14px; padding: 4px 0 4px 20px;
+    border-left: 3px solid var(--clay);
+    font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate);
+  }
+  .bridge b { font-weight: 600; }
+  .bridge .to {
+    display: block; margin-top: 7px;
+    font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400;
+  }
+
+  /* ── 卡片 / 栅格 ──────────────────────── */
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag {
+    font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--gray-150);
+  }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+
+  /* ── 图表容器 ─────────────────────────── */
+  figure {
+    border: 1.5px solid var(--gray-300); border-radius: 14px;
+    background: #fff; padding: 20px 22px 16px; margin-bottom: 16px;
+  }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150);
+    font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+  }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h {
+    font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px;
+    display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+
+  /* ── SVG 图元 ─────────────────────────── */
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .hi   { fill: var(--rust); font-weight: 600; }
+  .rf .okx  { fill: var(--olive); font-weight: 600; }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+
+  /* ── 主流程图 ─────────────────────────── */
+  .canvas {
+    border: 1.5px solid var(--gray-300); border-radius: 14px;
+    background: #fff; padding: 26px; overflow-x: auto;
+  }
+  .canvas-grid {
+    display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr);
+    gap: 26px; align-items: start;
+  }
+  @media (max-width: 1080px) { .canvas-grid { grid-template-columns: 1fr; gap: 20px; } }
+  .cv-side { display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+  svg.flow { display: block; width: 100%; height: auto; max-width: 620px; margin: 0 auto; }
+  .flow text { font-family: var(--sans); font-size: 13px; fill: var(--slate); }
+  .flow .code { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .flow .sub  { font-size: 11px; fill: var(--gray-700); }
+  .flow .lbl  { font-size: 10px; font-family: var(--mono); fill: var(--gray-500); }
+  .node rect      { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; rx: 8; }
+  .node.term rect { fill: var(--gray-150); rx: 24; }
+  .node.ok rect   { fill: rgba(120,140,93,0.12); stroke: var(--olive); }
+  .node.gate path { fill: #fff; stroke: var(--clay); stroke-width: 1.5; }
+  .edge        { stroke: var(--gray-500); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+  .edge.rework { stroke: var(--rust); stroke-dasharray: 4 4; marker-end: url(#arrow-rust); }
+  .edge.express{ stroke: var(--olive); stroke-dasharray: 6 4; marker-end: url(#arrow-olive); }
+
+  /* ── 两层分隔 + 跨卡片资产层 ───────────── */
+  .planes {
+    margin: 0 0 14px; border-top: 1.5px dashed var(--gray-300);
+    border-bottom: 1.5px dashed var(--gray-300); padding: 9px 0;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .planes span { font-size: 11.5px; color: var(--gray-500); display: flex; align-items: baseline; gap: 7px; }
+  .planes b { color: var(--slate); font-weight: 600; font-size: 12px; }
+  .planes .ar { font-family: var(--mono); color: var(--clay); }
+
+  .assets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 1080px) { .assets { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 760px)  { .assets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .asset .a-name { white-space: normal; }
+  .asset {
+    border: 1.5px solid var(--gray-300); border-radius: 10px; background: #fff;
+    padding: 10px 10px 9px; display: flex; flex-direction: column; gap: 5px; min-width: 0;
+  }
+  .asset.run { border-style: dashed; border-color: var(--olive); background: rgba(120,140,93,0.06); }
+  .asset .a-top { display: flex; align-items: center; gap: 4px; }
+  .asset .a-name { font-size: 12.5px; font-weight: 600; color: var(--slate); line-height: 1.3; white-space: nowrap; }
+  .asset.run .a-name { font-size: 12px; font-family: var(--mono); }
+  .asset .a-layer {
+    align-self: flex-start; font-size: 10px; font-family: var(--mono);
+    color: var(--gray-500); background: var(--gray-150); border-radius: 4px; padding: 1px 5px;
+  }
+  .asset.run .a-layer { background: rgba(120,140,93,0.16); color: var(--olive); }
+  .asset .a-path {
+    font-family: var(--mono); font-size: 10.5px; color: var(--rust);
+    overflow-wrap: anywhere; line-height: 1.45;
+  }
+  .asset .a-rw { font-size: 10.5px; color: var(--gray-700); line-height: 1.55; }
+  .asset .a-rw em { font-style: normal; color: var(--gray-500); font-family: var(--mono); margin-right: 3px; }
+
+  .legend.in-canvas {
+    margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--gray-150);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.gate { transform: rotate(45deg); width: 11px; height: 11px; border-radius: 2px; border-color: var(--clay); }
+  .chip.line { height: 0; border: none; border-top: 2px dashed var(--rust); border-radius: 0; }
+  .chip.line.express { border-top-color: var(--olive); }
+  .chip.ok { background: rgba(120,140,93,0.12); border-color: var(--olive); }
+  .chip.cross { border-radius: 3px; }
+  .chip.cross.run { border-style: dashed; border-color: var(--olive); background: rgba(120,140,93,0.06); }
+
+  /* ── 表格 ─────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left; font-weight: 600; color: var(--gray-700);
+    border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  .col-old { color: var(--gray-500); }
+  .st { font-family: var(--mono); font-size: 11px; color: var(--gray-500); white-space: nowrap; }
+  .who { white-space: nowrap; }
+
+  .delta {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150);
+    font-size: 12.5px; line-height: 1.8; color: var(--gray-700);
+  }
+  .delta b { color: var(--slate); }
+
+  /* ── 清单 ─────────────────────────────── */
+  ul.rkv { list-style: none; }
+  ul.rkv li {
+    font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+    padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150);
+  }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+
+  /* ── 走查:一张卡的一生 ────────────────── */
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li {
+    counter-increment: tr; position: relative;
+    border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff;
+    padding: 15px 18px 13px 52px; margin-bottom: 10px;
+  }
+  ol.trace > li::before {
+    content: counter(tr); position: absolute; left: 16px; top: 15px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px; color: var(--gray-700);
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.trace > li:not(:last-child)::after {
+    content: ""; position: absolute; left: 27.5px; top: 43px;
+    height: calc(100% - 32px); width: 1.5px; background: var(--gray-150);
+  }
+  ol.trace > li.human { border-color: var(--clay); background: rgba(217,119,87,0.04); }
+  ol.trace > li.human::before { background: rgba(217,119,87,0.16); border-color: var(--clay); color: var(--rust); }
+
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage {
+    font-family: var(--mono); font-size: 10.5px; color: var(--gray-700);
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+  }
+  .tr-flag {
+    margin-left: auto; font-family: var(--mono); font-size: 10px; white-space: nowrap;
+    border-radius: 999px; padding: 2px 10px;
+    background: rgba(217,119,87,0.14); border: 1px solid var(--clay); color: var(--rust); font-weight: 600;
+  }
+  .tr-flag.auto { background: var(--gray-150); border-color: var(--gray-300); color: var(--gray-500); font-weight: 400; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block {
+    background: var(--gray-150); border-radius: 7px; padding: 7px 11px;
+    font-size: 12px; color: var(--gray-700); margin-top: 9px;
+  }
+  ol.trace > li.human .tr-body .tr-block { background: #fff; border: 1px solid var(--oat); }
+  @media (max-width: 640px) { .tr-flag { margin-left: 0; } }
+
+  /* ── 实际用例:跳转卡 + 数字块 ──────────── */
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 30px; }
+  @media (max-width: 760px) { .links { grid-template-columns: 1fr; } }
+  a.linkcard {
+    display: block; text-decoration: none; border: 1.5px solid var(--gray-300);
+    border-radius: 14px; background: #fff; padding: 18px 20px 16px;
+    transition: transform 120ms ease, border-color 120ms ease;
+  }
+  a.linkcard:hover { transform: translateY(-2px); border-color: var(--clay); }
+  a.linkcard .lk-kind {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--clay); margin-bottom: 8px;
+  }
+  a.linkcard .lk-name { font-family: var(--serif); font-size: 19px; font-weight: 500; color: var(--slate); margin-bottom: 5px; }
+  a.linkcard .lk-desc { font-size: 12.5px; line-height: 1.6; color: var(--gray-700); margin-bottom: 10px; }
+  a.linkcard .lk-url {
+    font-family: var(--mono); font-size: 11px; color: var(--rust);
+    overflow-wrap: anywhere; line-height: 1.45; border-top: 1px solid var(--gray-150); padding-top: 9px;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+
+  .evtable td:first-child { font-weight: 600; color: var(--slate); white-space: normal; }
+  .ev { font-family: var(--mono); font-size: 11px; color: var(--rust); }
+  blockquote.raw {
+    border-left: 3px solid var(--oat); background: var(--gray-150);
+    border-radius: 0 8px 8px 0; padding: 11px 15px; margin: 12px 0;
+    font-size: 12.5px; line-height: 1.75; color: var(--gray-700);
+  }
+  blockquote.raw b { color: var(--slate); }
+
+
+  /* ── 标注画笔 ─────────────────────────── */
+  #annLayer {
+    position: absolute; top: 0; left: 0; z-index: 40;
+    pointer-events: none; overflow: visible;
+  }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+
+  .ann-bar {
+    position: fixed; right: 10px; top: 50%; transform: translateY(-50%);
+    z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+    background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px;
+    padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12);
+    width: 74px; opacity: 0.94;
+  }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button {
+    font-family: inherit; font-size: 11px; color: var(--gray-700);
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] {
+    width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300);
+    border-radius: 7px; background: none; cursor: pointer;
+  }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+
+  .ann-launch {
+    position: fixed; right: 10px; top: 50%; transform: translateY(-50%);
+    z-index: 60; display: none;
+    font-family: inherit; font-size: 12px; color: var(--gray-700);
+    background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px;
+    padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12);
+    writing-mode: vertical-rl; letter-spacing: 0.1em;
+  }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+
+  @media (max-width: 980px) {
+    .ann-bar { width: 72px; padding: 8px 6px; right: 8px; }
+    .ann-bar button { font-size: 11px; padding: 5px 2px; }
+  }
+
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+
+  /* ── 状态徽标 ─────────────────────────── */
+  .badge {
+    font-family: var(--mono); font-size: 10px; border-radius: 999px;
+    padding: 2px 9px; white-space: nowrap; display: inline-block;
+  }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+
+  /* ── 引用块 ───────────────────────────── */
+  .quote {
+    border-left: 3px solid var(--clay); padding: 6px 0 6px 18px; margin: 18px 0;
+    font-size: 14px; line-height: 1.75; color: var(--slate); font-family: var(--serif);
+  }
+  .quote cite { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-500); font-style: normal; margin-top: 8px; }
+
+  .srcbar {
+    border: 1.5px solid var(--oat); background: #fff; border-radius: 12px;
+    padding: 14px 18px; font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+  }
+  .srcbar a { color: var(--rust); text-decoration: none; border-bottom: 1px solid var(--clay); word-break: break-all; }
+  .srcbar b { color: var(--slate); }
+
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button>
+  <span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen" title="画笔">画笔</button>
+  <button class="ann-tool" data-tool="mark" title="荧光笔">荧光笔</button>
+  <button class="ann-tool" data-tool="eraser" title="橡皮擦">橡皮擦</button>
+  <span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757" title="颜色">
+  <input type="range" id="annSize" min="2" max="26" value="4" title="粗细">
+  <span class="sep"></span>
+  <button id="annUndo">撤销</button>
+  <button id="annClear">清空</button>
+  <button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch" title="展开标注工具">✎ 标注</button>
+
+<div class="sheet">
+
+  <aside class="sidenav">
+    <div class="brand">
+      <div class="brand-eyebrow">链路梳理 · D0.6.0</div>
+      <div class="brand-title">从发送到<br>首个 token</div>
+      <div class="brand-sub">origin/D0.6.0 a7af9cb33 · 2026-11-08</div>
+    </div>
+
+    <nav class="toc" id="toc">
+      <a href="#sec-sum" data-sec="sec-sum"><span class="num">01</span><span>结论</span></a>
+      <a href="#sec-map" data-sec="sec-map"><span class="num">02</span><span>整条链路</span></a>
+      <a href="#sec-steps" data-sec="sec-steps"><span class="num">03</span><span>逐段走查</span></a>
+      <a href="#sec-cost" data-sec="sec-cost"><span class="num">04</span><span>各段耗时来源</span></a>
+      <a href="#sec-top" data-sec="sec-top"><span class="num">05</span><span>三个优先嫌疑</span></a>
+      <a href="#sec-measure" data-sec="sec-measure"><span class="num">06</span><span>怎么量</span></a>
+    </nav>
+
+    <div class="navhint">点击目录跳转 · 正文连续滚动<br>右侧可开标注，<kbd>Esc</kbd> 退出</div>
+  </aside>
+
+  <main class="main">
+
+  <section id="sec-sum" style="margin-top:4px">
+    <div class="thesis">
+      <div class="t-kicker">一句话</div>
+      <div class="t-main">首 token 前的耗时分两类：<em>每轮都有的轮询与批处理</em>，以及<em>冷启动</em>。</div>
+      <p><strong>热路径</strong>：轮询、批处理和串行远程调用，叠加起来从几百毫秒到约 2.4 秒。其中最大的一块是 Harness 收取命令时的轮转阻塞读，<strong>最多空等 2 秒</strong>，平均约 0.5 秒。</p>
+      <p><strong>冷路径</strong>：工具沙箱 B、Harness A 或共享池需要启动时，首 token 会被拖到几十秒。B 在空闲 300 秒后断开，下一轮必须等它重新起来，因为这一轮要从 B 读指令文件和 Skills。</p>
+    </div>
+  </section>
+
+  <div class="bridge"><b>先看这一句话从浏览器出发，要经过哪些地方。</b><span class="to">↓　FE → BE → Harness（A）→ 工具沙箱（B）→ 模型 → 原路返回</span></div>
+
+  <section id="sec-map">
+    <h2><span class="n">02</span>整条链路</h2>
+    <p class="sub">五条泳道，十个步骤。去程走 Redis 控制流，回程走会话数据流；全程只有 FE↔BE 一段是 WebSocket。</p>
+
+    <figure>
+      <div class="fig-h">图 1 · 首 token 链路泳道图<span>橙框 = 耗时热点 · 编号 = 时间顺序</span></div>
+      <svg class="rf" viewBox="0 0 1070 372" role="img" aria-label="首 token 链路泳道图">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+        </defs>
+        <!-- lanes -->
+        <rect x="4" y="14"  width="1062" height="60" rx="8" fill="#FAF9F5"/>
+        <rect x="4" y="84"  width="1062" height="60" rx="8" fill="#FAF9F5"/>
+        <rect x="4" y="154" width="1062" height="60" rx="8" fill="#FAF9F5"/>
+        <rect x="4" y="224" width="1062" height="60" rx="8" fill="#FAF9F5"/>
+        <rect x="4" y="294" width="1062" height="60" rx="8" fill="#FAF9F5"/>
+        <text x="14" y="41"  style="font-size:12px;font-weight:600;fill:#141413">前端 FE</text>
+        <text x="14" y="56"  class="tiny" style="fill:#87867F">浏览器</text>
+        <text x="14" y="111" style="font-size:12px;font-weight:600;fill:#141413">后端 BE</text>
+        <text x="14" y="126" class="tiny" style="fill:#87867F">byclaw-be</text>
+        <text x="14" y="181" style="font-size:12px;font-weight:600;fill:#141413">Harness A</text>
+        <text x="14" y="196" class="tiny" style="fill:#87867F">共享 host / 沙箱</text>
+        <text x="14" y="251" style="font-size:12px;font-weight:600;fill:#141413">工具沙箱 B</text>
+        <text x="14" y="266" class="tiny" style="fill:#87867F">每用户一个</text>
+        <text x="14" y="321" style="font-size:12px;font-weight:600;fill:#141413">模型</text>
+        <text x="14" y="336" class="tiny" style="fill:#87867F">LLM 服务</text>
+
+        <!-- boxes: FE -->
+        <rect class="box" x="96" y="21" width="96" height="46" rx="8"/>
+        <text x="144" y="40" text-anchor="middle" style="font-size:11.5px;font-weight:600">① 发送</text>
+        <text x="144" y="55" class="tiny" text-anchor="middle" style="fill:#3D3D3A">WS LLM_MESSAGE</text>
+
+        <rect class="box-ok" x="960" y="21" width="96" height="46" rx="8"/>
+        <text x="1008" y="40" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑩ 渲染</text>
+        <text x="1008" y="55" class="tiny" text-anchor="middle" style="fill:#3D3D3A">30ms 合并刷新</text>
+
+        <!-- BE -->
+        <rect class="box" x="204" y="91" width="96" height="46" rx="8"/>
+        <text x="252" y="110" text-anchor="middle" style="font-size:11.5px;font-weight:600">② 准备</text>
+        <text x="252" y="125" class="tiny" text-anchor="middle" style="fill:#3D3D3A">额度·会话·员工</text>
+
+        <rect class="box-x" x="312" y="91" width="96" height="46" rx="8"/>
+        <text x="360" y="110" text-anchor="middle" style="font-size:11.5px;font-weight:600">③ 路由就绪</text>
+        <text x="360" y="125" class="tiny" text-anchor="middle" style="fill:#3D3D3A">共享池·冷启≤60s</text>
+
+        <rect class="box" x="420" y="91" width="96" height="46" rx="8"/>
+        <text x="468" y="110" text-anchor="middle" style="font-size:11.5px;font-weight:600">④ 派发</text>
+        <text x="468" y="125" class="tiny" text-anchor="middle" style="fill:#3D3D3A">XADD 控制流</text>
+
+        <rect class="box" x="960" y="91" width="96" height="46" rx="8"/>
+        <text x="1008" y="110" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑨ 回程</text>
+        <text x="1008" y="125" class="tiny" text-anchor="middle" style="fill:#3D3D3A">退避≤250+20ms</text>
+
+        <!-- A -->
+        <rect class="box-x" x="528" y="161" width="96" height="46" rx="8"/>
+        <text x="576" y="180" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑤ 收取</text>
+        <text x="576" y="195" class="tiny" text-anchor="middle" style="fill:#3D3D3A">轮转 BLOCK 2s</text>
+
+        <rect class="box" x="636" y="161" width="96" height="46" rx="8"/>
+        <text x="684" y="180" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑥ 组装本轮</text>
+        <text x="684" y="195" class="tiny" text-anchor="middle" style="fill:#3D3D3A">模型配置·setup</text>
+
+        <rect class="box" x="852" y="161" width="96" height="46" rx="8"/>
+        <text x="900" y="180" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑧ 回写</text>
+        <text x="900" y="195" class="tiny" text-anchor="middle" style="fill:#3D3D3A">96 字 / 80ms 批</text>
+
+        <!-- B -->
+        <rect class="box-x" x="636" y="231" width="96" height="46" rx="8"/>
+        <text x="684" y="250" text-anchor="middle" style="font-size:11.5px;font-weight:600">读指令/Skills</text>
+        <text x="684" y="265" class="tiny" text-anchor="middle" style="fill:#B04A3F">未连上：先启动 B</text>
+
+        <!-- model -->
+        <rect class="box" x="744" y="301" width="96" height="46" rx="8"/>
+        <text x="792" y="320" text-anchor="middle" style="font-size:11.5px;font-weight:600">⑦ 模型</text>
+        <text x="792" y="335" class="tiny" text-anchor="middle" style="fill:#3D3D3A">流式首包</text>
+
+        <!-- edges -->
+        <path class="ln" d="M192,44 L198,44 L198,114 L203,114" marker-end="url(#ar)"/>
+        <path class="ln" d="M300,114 L311,114" marker-end="url(#ar)"/>
+        <path class="ln" d="M408,114 L419,114" marker-end="url(#ar)"/>
+        <path class="ln" d="M516,114 L522,114 L522,184 L527,184" marker-end="url(#ar)"/>
+        <path class="ln" d="M624,184 L635,184" marker-end="url(#ar)"/>
+        <path class="ln-d" d="M684,208 L684,230" marker-start="url(#ar)" marker-end="url(#ar)"/>
+        <path class="ln" d="M732,184 L738,184 L738,324 L743,324" marker-end="url(#ar)"/>
+        <path class="ln" d="M840,324 L846,324 L846,184 L851,184" marker-end="url(#ar)"/>
+        <path class="ln" d="M948,184 L954,184 L954,114 L959,114" marker-end="url(#ar)"/>
+        <path class="ln" d="M1008,90 L1008,68" marker-end="url(#ar)"/>
+
+        <text x="530" y="152" class="mono" style="fill:#87867F">byai_gateway:ctrl:agent_type:BYCLAW_DSH_&lt;user&gt;</text>
+        <text x="852" y="232" class="mono" style="fill:#87867F">session:&lt;sid&gt;:data_stream</text>
+        <text x="760" y="40" class="tiny" style="fill:#B04A3F;font-weight:600">首 token 出现在这里 →</text>
+      </svg>
+      <figcaption><b>只有 ③ 和 ⑥ 会出现几十秒级的等待</b>，而且都是因为有东西要现场启动：③ 是 Harness A 或共享池，⑥ 是工具沙箱 B。⑤ 的轮转读不论冷热每轮都可能白等，是热路径里最大的单项。</figcaption>
+    </figure>
+  </section>
+
+  <div class="bridge"><b>图上每个框背后都有具体代码。</b><span class="to">↓　逐段说明做了什么、在哪里、可能卡多久。</span></div>
+
+  <section id="sec-steps">
+    <h2><span class="n">03</span>逐段走查</h2>
+    <p class="sub">高亮的三步是耗时热点。路径简写：FE = <code>byclaw-fe/src/</code>，BE = <code>byclaw-be/…/byai/</code>，INT = <code>middleware/byclaw-harness/plugins/byclaw-integration/src/</code>，FW = vendored by-framework 1.7.0 包。</p>
+
+    <ol class="trace">
+      <li>
+        <div class="tr-head"><span class="tr-stage">FE</span><b>点发送，写一帧 LLM_MESSAGE</b><span class="tr-flag auto">通常 ≈0</span></div>
+        <div class="tr-body">
+          <p><code>queryInputBase.tsx:494</code> → <code>useChat/index.ts:1053 sendQuery</code> → <code>useSseSender/useSend.ts:57</code>。全局 WebSocket 在登录和布局挂载时就已建好，发送时不再握手；会话也不由前端创建，新会话由服务端回 <code>createSession</code> 事件。</p>
+          <p class="tr-block"><b>会变慢的情况：</b>构建开关 <code>PERSONAL_STORAGE_ADMISSION_ENABLED</code> 打开时，每次发送前同步请求 <code>/storage/personal/readiness</code>，没就绪就轮询（15s 起，退避到 60s）；WS 断开时最多等 10s 重连；会话停在历史分页时，先整页重载再重发。</p>
+        </div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">BE</span><b>接收与准备参数</b><span class="tr-flag auto">数十毫秒级</span></div>
+        <div class="tr-body">
+          <p><code>WebSocketHandler.java:113</code> → <code>ChatService.llmChat</code>（额度）→ <code>AssistantChatService.chat:190</code>：平台 <code>storage/quota-check</code> 远程调用（:214）、默认助手和员工查库、新会话写库；<code>ScriptService.prepareParams</code> 推 <code>initialization</code> 给前端，用户消息异步写库，<code>ParamService.getParams</code> 查员工和技能。</p>
+          <p>历史和记忆<b>不在 BE 组装</b>，只把会话引用传给 Harness。</p>
+        </div>
+      </li>
+      <li class="human">
+        <div class="tr-head"><span class="tr-stage">BE</span><b>路由与就绪检查</b><span class="tr-flag">热点</span></div>
+        <div class="tr-body">
+          <p><code>RouteService.java:173</code>：<code>resolveTarget</code> + <code>ensureWorkerReadyBeforeFirstSend</code>，共用一个默认 60s 的时限。目标是 <code>BYCLAW_DSH_&lt;user&gt;</code>；共享池用户每轮都调 <code>SharedSandboxGateway.tryAcquire</code>，而且调了两遍，最多 2–6 次串行平台 HTTP 调用。worker 在线就直接走。</p>
+          <p class="tr-block"><b>冷启动：</b>worker 离线时同步拉起（平台 launch 或向共享 host <code>PUT /v1/users/{user}</code>，请求超时 100s），然后每 100ms 查一次 Redis 注册表，最长 60s。派发失败会重启并等 5×60s。这些都跑在核心线程只有 4 个的 <code>sandboxStartupExecutor</code> 上，热请求可能排在冷启动后面。</p>
+        </div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">BE</span><b>派发到 Harness</b><span class="tr-flag auto">一次 XADD</span></div>
+        <div class="tr-body">
+          <p><code>sendMessageWithWorkerRetry</code> 组装载荷（新签的 JWT、<code>runtimeType=dsh</code>、cwd、模型、群聊引用），通过 by-framework 写到 <code>byai_gateway:ctrl:agent_type:BYCLAW_DSH_&lt;user&gt;</code>。派发前先建好回程消费组和会话锁。</p>
+        </div>
+      </li>
+      <li class="human">
+        <div class="tr-head"><span class="tr-stage">Harness A</span><b>收取命令、打开会话</b><span class="tr-flag">热点</span></div>
+        <div class="tr-body">
+          <p>FW <code>runner.ts:530 poll()</code>：先对每个流做一次非阻塞读，都空的话只对其中<b>一个</b>流做 <code>BLOCK 2000</code>，按轮转选。worker 监听 <code>BYCLAW_DSH</code> 和 <code>BYCLAW_DSH_&lt;user&gt;</code> 两个流（INT <code>index.ts:396</code>），BE 只写后一个，所以有一半概率阻塞在错的流上（见图 2）。</p>
+          <p>读到后：执行记录读写 → <code>sessions.ask</code> → <code>findPending</code> → 同一用户同一会话排队 → <code>handleFor</code> 复用内存会话，否则从 A 的磁盘重放事件日志恢复，或新建。</p>
+        </div>
+      </li>
+      <li class="human">
+        <div class="tr-head"><span class="tr-stage">Harness A ↔ B</span><b>组装本轮：模型配置、setup、指令文件与 Skills</b><span class="tr-flag">热点</span></div>
+        <div class="tr-body">
+          <p>模型配置每轮都读 Redis，不缓存（<code>model-runtime.ts:1060</code>）；复用会话时 <code>sessionSetup</code> 也每轮重跑（<code>session-runtime.ts:2451</code>）。然后 DSH 通过 SSH 从 B 读 AGENTS.md 和 Skills，<b>读完才发模型请求</b>。</p>
+          <p class="tr-block"><b>B 没连上时</b>（<code>dsh-tool-env/src/connection.ts:104-115</code>，日志 <code>tool environment start requested by</code>）：BE 申请或拉起 B（60s 重试窗口，每 3s 一次）→ 每 500ms 探活（最长 180s）→ SSH 握手 → 回放积压的操作。B 空闲 300s 后断开（<code>BYCLAW_TOOL_ENV_IDLE_MS</code>），下一轮从头再来。B 不可达时会删掉重建，最坏约 2×(60+180)s。</p>
+        </div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">模型</span><b>流式请求，等首包</b><span class="tr-flag auto">取决于模型服务</span></div>
+        <div class="tr-body"><p>供应商和模型来自 Redis 记录，HTTP 走 undici（<code>model-fetch.ts</code>）。首包处理在 DSH 内核的 agentLoop 里，本次没有细读。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">Harness A</span><b>攒批写回 Redis</b><span class="tr-flag auto">≤80ms</span></div>
+        <div class="tr-body"><p><code>TimedChunkBatcher</code>（<code>session-runtime.ts:254</code>）攒够 96 个字符或等满 80ms 才发；每块一次 <code>XADD + EXPIRE</code> 到 <code>session:&lt;sid&gt;:data_stream</code>。思考和正文分别攒批。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">BE</span><b>消费回程流，推给前端</b><span class="tr-flag auto">≤270ms</span></div>
+        <div class="tr-body"><p><code>ReactiveSessionStreamReceiver.java:126</code> 非阻塞 <code>XREADGROUP</code>，空闲时等待从 5ms 翻倍到 250ms 封顶；拿到后再等 20ms 攒批（<code>RedisStreamMessageListener.java:87</code>），然后逐条 <code>writeAndFlush</code> 到 WS。模型想了好几秒才出首包时，首包很可能正好碰上 250ms 的空档。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">FE</span><b>应用事件，显示第一段文字</b><span class="tr-flag auto">≤30ms</span></div>
+        <div class="tr-body"><p><code>CHAT_STREAM</code> → <code>chatRuntime.ts:619</code> → 首个 <code>reasoningLogDelta</code>（思考面板）或 <code>answerDelta</code>（正文）。非终止事件合并 30ms 再刷（<code>chatRuntime.ts:42</code>），然后 redux 深合并整条消息。首 token 之前前端只显示本地转圈，<b>没有“正在准备沙箱”的状态</b>。</p></div>
+      </li>
+    </ol>
+  </section>
+
+  <div class="bridge"><b>把十步按“每轮都有”和“冷启动才有”拆开。</b><span class="to">↓　热路径看毫秒，冷路径看秒。</span></div>
+
+  <section id="sec-cost">
+    <h2><span class="n">04</span>各段耗时来源</h2>
+    <p class="sub">都是代码里能看到的上限或间隔，<strong>不是实测值</strong>；实际占比要靠第 06 节的打点来量。</p>
+
+    <div class="stats">
+      <div class="stat hot"><div class="s-num">≤2<em> 秒</em></div><div class="s-lab">Harness 收取空等</div><div class="s-sub">平均约 0.5s，每轮都可能有</div></div>
+      <div class="stat"><div class="s-num">≤380<em> ms</em></div><div class="s-lab">回程轮询与批处理</div><div class="s-sub">80 + 250 + 20 + 30</div></div>
+      <div class="stat"><div class="s-num">2–6<em> 次</em></div><div class="s-lab">共享池每轮平台调用</div><div class="s-sub">串行 HTTP，热的也有</div></div>
+      <div class="stat hot"><div class="s-num">300<em> 秒</em></div><div class="s-lab">B 空闲断开</div><div class="s-sub">之后第一句话要等 B 启动</div></div>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:14%">段</th><th style="width:40%">每轮都有</th><th>冷启动或异常时</th></tr>
+        <tr><td>① FE</td><td class="col-old">WS 已提前建好，约 0</td><td>存储就绪开关打开时每次同步请求并可能轮询；WS 断开最多等 10s</td></tr>
+        <tr><td>② BE 准备</td><td>平台 <code>quota-check</code>、若干次查库；新会话插入记录</td><td class="col-old">—</td></tr>
+        <tr><td>③ BE 路由</td><td>共享池用户 2–6 次串行平台调用；4 核心线程池排队</td><td><span class="warn">worker 离线同步拉起，最长 60s；失败重启再等 5×60s</span></td></tr>
+        <tr><td>⑤ Harness 收取</td><td><span class="warn">轮转阻塞读，最多空等 2s</span></td><td>恢复会话要从磁盘重放事件日志</td></tr>
+        <tr><td>⑥ 组装本轮</td><td>模型配置每轮读 Redis；<code>sessionSetup</code> 每轮重跑；SSH 读几个文件</td><td><span class="warn">B 启动：申请（60s 窗口）→ 探活（≤180s）→ 握手 → 回放</span></td></tr>
+        <tr><td>⑦ 模型</td><td>模型服务自身的首包时间</td><td class="col-old">—</td></tr>
+        <tr><td>⑧ 回写</td><td>首块最多多等 80ms</td><td class="col-old">—</td></tr>
+        <tr><td>⑨ BE 回程</td><td>退避最多 250ms，再加 20ms 批处理</td><td class="col-old">—</td></tr>
+        <tr><td>⑩ FE 渲染</td><td>30ms 合并加 redux 深合并</td><td class="col-old">—</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>热路径里能直接省掉的是 ⑤ 的空等和 ⑧⑨⑩ 的固定延迟；冷路径的大头是 ⑥ 的 B 启动，它把“工具沙箱”拉进了“模型开口前”的关键路径。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>按收益和确定性排序，有三处值得先查。</b><span class="to">↓　第一处影响冷路径，第二处已核实代码，第三处在并发时放大。</span></div>
+
+  <section id="sec-top">
+    <h2><span class="n">05</span>三个优先嫌疑</h2>
+    <p class="sub">第 2 点我已经对照框架源码核实过；第 1、3 点的机制在代码里清楚，量级要实测。</p>
+
+    <div class="g3">
+      <div class="card"><h3>① B 冷启动在首 token 前</h3><div class="tag">秒级到几十秒 · 冷路径</div><p>这一轮要从 B 读指令文件和 Skills，B 没连上就先启动它。B 空闲 300s 断开，所以<span class="warn">隔几分钟再聊的第一句话最容易慢</span>。可选方向：把指令文件和 Skills 在 A 侧缓存，或把 B 的启动移出模型请求的关键路径。</p></div>
+      <div class="card"><h3>② 收取命令的轮转阻塞读</h3><div class="tag">≤2s，平均约 0.5s · 每轮</div><p>worker 监听两个流，BE 只写 <code>BYCLAW_DSH_&lt;user&gt;</code>，但阻塞读在两个流之间轮换。阻塞在 <code>BYCLAW_DSH</code> 上时，新消息要等 2s 超时才被读到。<span class="good">只改框架一处</span>（一次 XREADGROUP 同时 BLOCK 多个流）就能稳定省掉。</p></div>
+      <div class="card"><h3>③ 共享池的串行平台调用</h3><div class="tag">每轮 2–6 次 HTTP · 并发放大</div><p><code>tryAcquire</code> 在路由和就绪检查里各调一次，而且跑在只有 4 个核心线程的启动池上。<span class="warn">有人在冷启动时，热用户的请求也会排队。</span>可选方向：一轮内复用结果，热请求不进启动池。</p></div>
+    </div>
+
+    <figure style="margin-top:16px">
+      <div class="fig-h">图 2 · 为什么会白等最多 2 秒<span>FW runner.ts:530-561 · 轮转阻塞读</span></div>
+      <svg class="rf" viewBox="0 0 1000 200" role="img" aria-label="轮转阻塞读示意">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/>
+          </marker>
+        </defs>
+        <text x="10" y="44" style="font-size:11.5px;font-weight:600">BYCLAW_DSH</text>
+        <text x="10" y="59" class="tiny" style="fill:#87867F">通用流，没人写</text>
+        <text x="10" y="104" style="font-size:11.5px;font-weight:600">BYCLAW_DSH_&lt;user&gt;</text>
+        <text x="10" y="119" class="tiny" style="fill:#87867F">BE 写这里</text>
+
+        <rect class="box-d"  x="180" y="30" width="195" height="34" rx="6"/>
+        <text x="277" y="51" text-anchor="middle" class="tiny" style="fill:#3D3D3A">阻塞读 2s</text>
+        <rect class="box-ok" x="375" y="90" width="195" height="34" rx="6"/>
+        <text x="472" y="111" text-anchor="middle" class="tiny" style="fill:#3D3D3A">阻塞读 2s</text>
+        <rect class="box-x"  x="570" y="30" width="195" height="34" rx="6"/>
+        <text x="667" y="51" text-anchor="middle" class="tiny" style="fill:#B04A3F;font-weight:600">阻塞在错的流上</text>
+        <rect class="box-ok" x="765" y="90" width="195" height="34" rx="6" style="fill:rgba(120,140,93,0.32)"/>
+        <text x="862" y="111" text-anchor="middle" class="tiny" style="fill:#141413;font-weight:600">取到，开始处理</text>
+
+        <line class="base" x1="180" y1="150" x2="960" y2="150"/>
+        <text x="180" y="168" class="mono" text-anchor="middle">0s</text>
+        <text x="375" y="168" class="mono" text-anchor="middle">2s</text>
+        <text x="570" y="168" class="mono" text-anchor="middle">4s</text>
+        <text x="765" y="168" class="mono" text-anchor="middle">6s</text>
+        <text x="960" y="168" class="mono" text-anchor="middle">8s</text>
+
+        <circle cx="599" cy="107" r="5" style="fill:#B04A3F"/>
+        <text x="607" y="140" class="tiny" style="fill:#B04A3F">4.3s 消息到达</text>
+        <path class="ln-d" d="M604,107 L760,107" marker-end="url(#ar2)"/>
+        <text x="682" y="84" text-anchor="middle" class="tiny" style="fill:#B04A3F;font-weight:600">白等 1.7s</text>
+        <text x="772" y="140" class="tiny" style="fill:#3D3D3A">6s 下一轮的非阻塞读才取到</text>
+        <text x="180" y="192" class="tiny" style="fill:#87867F">空闲时 poll() 先非阻塞读两个流，都空就只对其中一个 BLOCK 2000，下一次换另一个。</text>
+      </svg>
+      <figcaption><b>Redis 的 XREADGROUP 本身支持同时阻塞多个流</b>，任何一个流有消息就立刻返回。现在只阻塞一个流，是为了“轮流给每个流阻塞名额”，代价就是这段空等。</figcaption>
+    </figure>
+  </section>
+
+  <div class="bridge"><b>以上都是读代码得出的上限。</b><span class="to">↓　现有打点已经能把链路切开，按 requestId 串起来就能拿到实测分布。</span></div>
+
+  <section id="sec-measure">
+    <h2><span class="n">06</span>怎么量</h2>
+    <p class="sub">三端都已有 <code>chat_chain</code> 结构化日志（一行 JSON，带 requestId、invocationId、时间戳和耗时），字段说明见 INT 下的 <code>CHAT-CHAIN.zh.md</code>。B 的启动不在其中，要单独 grep。</p>
+
+    <div class="card">
+      <table class="evtable">
+        <tr><th style="width:16%">端</th><th style="width:44%">阶段</th><th>能切出的段</th></tr>
+        <tr><td>FE</td><td><span class="ev">fe.sent · fe.reply_received · fe.reply_applied</span></td><td>端到端首 token；⑩ 渲染</td></tr>
+        <tr><td>BE</td><td><span class="ev">be.received · be.prepare · be.params · be.route · be.worker_ready · be.dispatch · be.dispatched</span></td><td>② ③ ④</td></tr>
+        <tr><td>Harness</td><td><span class="ev">harness.*（带 durationMs）</span></td><td>⑤ ⑥ 的准备部分、⑦</td></tr>
+        <tr><td>BE 回程</td><td><span class="ev">be.reply_received · be.ws_write</span></td><td>⑧ ⑨</td></tr>
+        <tr><td>工具沙箱 B</td><td><span class="ev">tool environment start requested by · connected · running N deferred</span></td><td>⑥ 里 B 的启动耗时</td></tr>
+      </table>
+    </div>
+
+    <ol class="trace" style="margin-top:18px">
+      <li class="human">
+        <div class="tr-head"><span class="tr-stage">建议下一步</span><b>在验证环境跑一组对照</b><span class="tr-flag">待确认</span></div>
+        <div class="tr-body">
+          <p><b>两类用户</b>：共享 host 用户、独立沙箱用户。<b>三种情况</b>：热会话连发、空闲 5 分钟后再发、新会话。每种发几轮，按段汇总分布。</p>
+          <p class="tr-block"><b>要回答的问题：</b>三个嫌疑各占多少；热路径里 ⑤ 的空等是否真接近平均 0.5s；冷路径里 B 启动和 A 启动哪个更常见。</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="note">
+      <h2>说明与未覆盖部分</h2>
+      <ul>
+        <li><strong>代码版本</strong>：origin/D0.6.0 a7af9cb33。本地主检出落后 615 个提交，没有用它。</li>
+        <li><strong>没细读的部分</strong>：DSH 内核里指令文件和 Skills 的加载器、模型流式客户端的首包处理、MCP 工具列表、SSH 端口探活间隔。这几处的耗时要靠实测补上。</li>
+        <li><strong>配置变化</strong>：BE 已不再读 <code>BYCLAW_SHARED_DSH_HOST_USERS</code>，共享用户由 <code>BYCLAW_SANDBOX_SHARED_POLICY</code> 决定（BE README:99）。</li>
+        <li><strong>前端缺口</strong>：首 token 之前没有“正在准备环境”的提示，冷启动时用户只能看着转圈几十秒。</li>
+      </ul>
+    </div>
+  </section>
+
+  </main>
+
+</div>
+
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); });
+}, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => {
+  ev.preventDefault();
+  const s = document.getElementById(a.dataset.sec);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', '#' + a.dataset.sec);
+}));
+
+/* ── 标注画笔 ───────────────────────────── */
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer');
+  const bar = document.getElementById('annBar');
+  const launch = document.getElementById('annLaunch');
+  const toggle = document.getElementById('annToggle');
+  const colorEl = document.getElementById('annColor');
+  const sizeEl = document.getElementById('annSize');
+
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = [];
+  const strokes = [];
+
+  let fitting = false;
+  const fit = () => {
+    if (fitting) return;
+    fitting = true;
+    // 先把层收成 0,否则它自己会被算进 scrollWidth/Height,形成只涨不缩的反馈环
+    layer.style.width = '0px';
+    layer.style.height = '0px';
+    const w = document.documentElement.clientWidth;
+    const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    layer.setAttribute('width', w);
+    layer.setAttribute('height', h);
+    layer.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    fitting = false;
+  };
+  fit();
+  addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.body);
+
+  const setOn = v => {
+    on = v;
+    document.body.classList.toggle('ann-on', on);
+    toggle.textContent = on ? '标注中' : '开启标注';
+    toggle.classList.toggle('on', on);
+  };
+
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => {
+    tool = b.dataset.tool;
+    document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b));
+    if (!on) setOn(true);
+    strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; });
+  }));
+
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => {
+    const last = strokes.pop(); if (last) last.remove();
+  });
+  document.getElementById('annClear').addEventListener('click', () => {
+    while (strokes.length) strokes.pop().remove();
+  });
+  document.getElementById('annHide').addEventListener('click', () => {
+    setOn(false); bar.classList.add('hidden'); launch.classList.add('show');
+  });
+  launch.addEventListener('click', () => {
+    bar.classList.remove('hidden'); launch.classList.remove('show');
+  });
+
+  const at = e => {
+    const r = layer.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+
+  layer.addEventListener('pointerdown', e => {
+    if (!on || e.button !== 0) return;
+    if (tool === 'eraser') return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    drawing = true;
+    pts = [at(e)];
+    cur = document.createElementNS(NS, 'path');
+    const w = +sizeEl.value;
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke', colorEl.value);
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    if (tool === 'mark') {
+      cur.setAttribute('stroke-width', w * 3.2);
+      cur.setAttribute('stroke-opacity', '0.32');
+      cur.style.mixBlendMode = 'multiply';
+    } else {
+      cur.setAttribute('stroke-width', w);
+    }
+    cur.style.pointerEvents = 'none';
+    cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`);
+    layer.appendChild(cur);
+  });
+
+  layer.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = at(e), last = pts[pts.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return;
+    pts.push(p);
+    cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`);
+  });
+
+  const end = () => {
+    if (!drawing) return;
+    drawing = false;
+    if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); }
+    cur = null;
+  };
+  layer.addEventListener('pointerup', end);
+  layer.addEventListener('pointercancel', end);
+
+  layer.addEventListener('pointerover', e => {
+    if (on && tool === 'eraser' && e.target !== layer) {
+      const i = strokes.indexOf(e.target);
+      if (i > -1) { strokes.splice(i, 1); e.target.remove(); }
+    }
+  });
+
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape' && on) setOn(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) {
+      e.preventDefault(); const last = strokes.pop(); if (last) last.remove();
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>CubeSandbox 双节点集群 · 从 0 到 1 部署手册</title><style>
+:root{--bg:#faf9f5;--ink:#242821;--muted:#6f7669;--line:#dedfd4;--green:#526742;--clay:#b85b3d;--panel:#f0f2e9;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.75 system-ui,-apple-system,sans-serif}a{color:var(--green)}.layout{max-width:1260px;margin:0 auto;padding:40px 28px 100px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:46px}nav{position:sticky;top:26px;align-self:start;font-size:13px}nav strong{display:block;font-size:11px;letter-spacing:.15em;margin:28px 0 12px;color:var(--muted)}nav a{display:block;padding:7px 12px;border-left:2px solid var(--line);text-decoration:none}nav a:hover,nav a.active{border-color:var(--clay);color:var(--clay)}.eyebrow{font-size:12px;letter-spacing:.12em;color:var(--green);font-weight:750}h1{font-size:clamp(32px,4.4vw,52px);line-height:1.2;letter-spacing:-.04em;margin:14px 0 22px}h2{font-size:27px;line-height:1.3;margin:8px 0 20px}h3{font-size:19px;margin:24px 0 12px}.lead{color:var(--muted);font-size:18px;max-width:780px}.tags{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}.tag{border:1px solid var(--line);border-radius:30px;padding:5px 12px;font-size:12px}.hero{border:1px solid #d5dfcc;background:#eaf0e2;border-radius:20px;padding:26px}.hero p{margin:8px 0}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}.metric{padding:20px;background:#fff9;border:1px solid var(--line);border-radius:12px}.metric b{display:block;font-size:29px}.metric span{font-size:12px;color:var(--muted)}section{border-top:1px solid var(--line);padding-top:38px;margin-top:42px;scroll-margin-top:22px}.num{font-family:var(--mono);font-size:12px;color:var(--clay)}.callout{border-left:3px solid var(--clay);padding:14px 20px;background:#f7ede5;margin:20px 0}.good{border-color:var(--green);background:var(--panel)}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{background:var(--panel)}code{font-family:var(--mono);font-size:.85em;background:#e9ecdf;padding:2px 5px;border-radius:4px}pre{position:relative;margin:14px 0 24px;padding:22px 18px;background:#20271e;color:#e6ecde;border-radius:12px;overflow:auto;font:12px/1.8 var(--mono);white-space:pre}pre code{background:none;padding:0;color:inherit;font-size:inherit}.copy{position:absolute;top:8px;right:8px;border:1px solid #687263;background:#303b2c;color:#fff;padding:4px 9px;border-radius:5px;cursor:pointer}.topology{display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;gap:12px;margin:26px 0}.node{border:1px solid #ccd5c2;border-radius:14px;padding:22px;background:var(--panel)}.node small{display:block;color:var(--muted)}.node b{display:block;font-size:19px;margin:7px 0}.node ul{padding-left:18px;font-size:13px}.arrow{text-align:center;color:var(--green);font-size:26px}.flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:22px 0}.flow span{background:var(--panel);padding:12px 15px;border:1px solid var(--line);border-radius:9px;font-size:14px}.checks{display:grid;grid-template-columns:1fr 1fr;gap:12px}.check{padding:16px;border:1px solid var(--line);border-radius:10px}.check b{color:var(--green)}details{border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:12px 0}summary{cursor:pointer;font-weight:650}footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:40px;padding-top:20px}.controls{display:flex;gap:10px;margin-bottom:22px}.controls button{background:none;border:1px solid var(--line);padding:8px 12px;border-radius:6px;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--clay);outline-offset:3px}@media(max-width:850px){.layout{grid-template-columns:1fr;padding:24px 18px 60px;gap:12px}nav{position:static;display:flex;flex-wrap:wrap;gap:5px}nav strong{display:none}nav a{padding:5px 8px;border:1px solid var(--line);border-radius:5px}.metrics{gap:7px}.metric{padding:12px}.metric b{font-size:23px}.topology{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.checks{grid-template-columns:1fr}}@media print{nav,.controls,.copy{display:none}.layout{display:block;padding:0}body{font-size:11px}h1{font-size:28px}section{margin-top:20px;padding-top:20px}pre{white-space:pre-wrap;color:#111;background:#f0f0f0;border:1px solid #ccc}details{display:block}.node,pre,.check{break-inside:avoid}a{color:inherit;text-decoration:none}}
+</style><style id="doc-responsive-fix">
+        .layout > main, .layout > nav { min-width:0; }
+        .layout > main { overflow-wrap:anywhere; }
+        @media(max-width:850px) {
+          .layout { grid-template-columns:minmax(0,1fr); }
+          .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        }
+        </style></head><body><div class="layout"><nav aria-label="章节目录"><a href="index.html">← 研究资料首页</a><strong>部署路线 / 0 → 1</strong><a href="#architecture">01 架构与角色</a><a href="#prepare">02 主机与网络</a><a href="#kernel">03 PVM 宿主内核</a><a href="#storage">04 XFS 存储</a><a href="#control">05 控制平面</a><a href="#compute">06 加入计算节点</a><a href="#templates">07 模板分发</a><a href="#scheduling">08 调度与 DSH</a><a href="#access">09 SSH 访问</a><a href="#acceptance">10 真实验收</a><a href="#operations">11 运维与排障</a><a href="#references">12 依据与边界</a></nav><main><header><div class="eyebrow">DEPLOYMENT FIELD GUIDE · 2026-10-12 · AMERICA/LOS_ANGELES</div><h1>CubeSandbox 双节点集群<br/>从 0 到 1 部署手册</h1><p class="lead">一个控制平面，两台计算主机。沿着已经完成的部署，解释云服务器如何获得 PVM 能力、计算节点如何注册，以及 DSH 的工具沙箱如何落到新节点。</p><div class="tags"><span class="tag">CubeSandbox v0.7.2</span><span class="tag">Ubuntu 22.04 · x86_64</span><span class="tag">PVM host 6.6.69</span><span class="tag">真实双节点验收</span></div><div class="controls"><button onclick="window.print()">打印 / 保存 PDF</button><button id="expand">展开全部步骤</button></div><div class="hero"><b>部署已经完成；这份文档同时给出重建顺序与本次验收事实。</b><p>220 保留完整控制平面并参与计算；118 作为 compute-only 节点。原有实例继续留在原主机，新建工具沙箱已成功自动调度到新主机。</p><div class="metrics"><div class="metric"><b>2 / 2</b><span>健康、可调度节点</span></div><div class="metric"><b>2</b><span>现用模板在两机 READY</span></div><div class="metric"><b>141 ms</b><span>一次定向创建客户端耗时</span></div></div></div></header>
+<section id="architecture"><span class="num">01 / TOPOLOGY</span><h2>当前部署：控制与计算分开扩展</h2><div class="topology"><article class="node"><small>控制 + 计算 · [220 公网 IP]</small><b>[220 内网 IP]</b><ul><li>CubeAPI / CubeMaster / CubeOps</li><li>模板中心 / CubeProxy / CoreDNS / WebUI</li><li>MySQL / Redis / MinIO</li><li>Cubelet / cube-egress / PVM 沙箱</li><li>现有 DSH A 与工具 B</li></ul></article><div class="arrow">⇄</div><article class="node"><small>仅计算 · [118 公网 IP]</small><b>[118 内网 IP]</b><ul><li>Cubelet / cube-egress</li><li>cube-shim / guest 内核与运行资产</li><li>PVM 宿主内核 / 64 GiB XFS</li><li>向 220 的 CubeOps 注册并上报</li><li>使用 220 的共享 MinIO</li></ul></article></div><p>两台 IP 不同，位于同一网段 <code>[内网网段]</code>。计算节点不部署第二套 MySQL、Redis、MinIO 或 CubeMaster。当前控制平面只有一份，双计算节点不等于控制平面高可用。</p><div class="flow"><span>DSH / SDK 发起创建</span>→<span>CubeAPI</span>→<span>CubeMaster 选节点</span>→<span>目标 Cubelet</span>→<span>PVM guest</span></div><p>工具调用则沿已有绑定：DSH → CubeProxy → 目标主机上的 guest WebSocket SSH → helper → 文件 / Bash。每次工具调用不会重新选择计算主机。</p></section>
+<section id="prepare"><span class="num">02 / PREFLIGHT</span><h2>先确认主机条件与内网互通</h2><p>本次目标均为 Ubuntu 22.04、x86_64。新节点为 8 vCPU、约 15 GiB 内存、约 197 GiB 系统文件系统。官方安装器要求至少约 8 GiB 内存；先检查正在运行的服务、登录会话和存储，再进行内核切换。</p><pre><code># 在每台主机执行
+uname -a
+cat /etc/os-release
+ip -br -4 addr
+ip -4 route
+free -h
+lsblk -f
+systemctl list-units --type=service --state=running --no-pager
+who
+
+# 新节点到控制平面
+ping -c 2 [220 内网 IP]
+for port in 8089 3010 9000; do
+  timeout 3 bash -c "&lt;/dev/tcp/[220 内网 IP]/$port"
+done</code></pre><h3>安装依赖与取得固定材料</h3><pre><code># 两台全新主机均先安装依赖；已有主机先核对
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl jq xfsprogs s3fs e2fsprogs \
+  util-linux docker.io docker-compose libaio1 libnuma1 uuid-runtime nvme-cli
+
+# 固定版本材料；两台主机可下载，或通过受控内网复制
+install -d -m 700 /opt/cube-cluster-node/downloads
+cd /opt/cube-cluster-node/downloads
+curl -fL --retry 2 -o bundle.tar.gz \
+  https://github.com/TencentCloud/CubeSandbox/releases/download/v0.7.2/cube-sandbox-one-click-v0.7.2-amd64.tar.gz
+curl -fL --retry 2 -o pvm-kernel-cn.deb \
+  https://github.com/TencentCloud/CubeSandbox/releases/download/kernel-release-260921-1/linux-image-6.6.69-opencloudos9.cubesandbox.pvm.host-g0de43d6b3bcd_6.6.69-g0de43d6b3bcd-1_amd64.deb
+curl -fL -o ../host_grub_config.sh \
+  https://raw.githubusercontent.com/TencentCloud/CubeSandbox/v0.7.2/deploy/pvm/grub/host_grub_config.sh
+printf '%s  %s\n' \
+  da5746dc277418363812aab91ed669cec56c411b77040ee26fb7c2be19d98e21 bundle.tar.gz \
+  14260f3c7c202490e6e836ba5c18998b5bda042f0047a91e00d2e6902feae275 pvm-kernel-cn.deb \
+  | sha256sum -c -</code></pre><p>上述 GitHub release 校验值与本次从控制节点复制的包一致。国内下载较慢时可以使用官方 CNB release 镜像，下载后仍核对同一 SHA-256。</p><div class="tablewrap"><table><thead><tr><th>方向 / 用途</th><th>端口</th><th>当前约束</th></tr></thead><tbody><tr><td>compute → CubeMaster</td><td>8089/TCP</td><td>使用控制主机内网地址</td></tr><tr><td>compute → CubeOps</td><td>3010/TCP</td><td>节点注册、资源与健康上报</td></tr><tr><td>compute → MinIO</td><td>9000/TCP</td><td>共享 S3；沿用原凭据</td></tr><tr><td>control → Cubelet</td><td>9999/TCP</td><td>所有 compute 节点端口一致</td></tr><tr><td>用户 → WebUI</td><td>本机 12088</td><td>SSH 转发，不依赖公网开放该端口</td></tr></tbody></table></div></section>
+<section id="kernel"><span class="num">03 / HOST KERNEL</span><h2>没有硬件嵌套虚拟化时，启用 PVM</h2><p>新节点原内核没有 <code>/dev/kvm</code>、没有暴露 vmx，加载 kvm_intel 返回不支持。CubeSandbox 采用与旧节点相同的 PVM 宿主内核，加载 <code>kvm_pvm</code> 提供运行能力。Firecracker 已按要求卸载，不属于当前部署。</p><div class="callout">这些步骤改变启动内核。仅对已确认可重启的目标主机执行；已有控制节点不需要为了加节点而重启。本次只重启了新节点。</div><p>从官方 kernel-release 发布页取得 DEB 主包及对应 GRUB 配置脚本，或使用本环境已校验的保留材料。不要以 master 最新内核替代本次固定内核而宣称复现。</p><pre><code># root；安装材料先放在 /opt/cube-cluster-node
+install -d -m 700 /opt/cube-cluster-node/backups
+cp -a /etc/default/grub /opt/cube-cluster-node/backups/grub.before-pvm
+
+dpkg-deb -f /opt/cube-cluster-node/downloads/pvm-kernel-cn.deb \
+  Package Version Architecture
+dpkg -i /opt/cube-cluster-node/downloads/pvm-kernel-cn.deb
+bash /opt/cube-cluster-node/host_grub_config.sh
+
+KVER=6.6.69-opencloudos9.cubesandbox.pvm.host-g0de43d6b3bcd
+sed -i "s|^GRUB_DEFAULT=.*|GRUB_DEFAULT=\"Advanced options for Ubuntu&gt;Ubuntu, with Linux $KVER\"|" /etc/default/grub
+update-grub
+ls -l /boot/vmlinuz-$KVER /boot/initrd.img-$KVER
+# 确认启动配置和业务窗口后重启
+systemctl reboot
+
+# 重连后
+uname -r
+modprobe kvm_pvm
+printf 'kvm_pvm\n' &gt; /etc/modules-load.d/kvm-pvm.conf
+lsmod | grep kvm
+ls -l /dev/kvm</code></pre><details><summary>固定材料与校验值</summary><p>内核包：<code>linux-image-6.6.69-opencloudos9.cubesandbox.pvm.host-g0de43d6b3bcd</code>；原 Ubuntu 5.15 内核保留。</p><pre><code># 本次保留材料的 SHA-256；下载后先核验
+# pvm-kernel-cn.deb
+14260f3c7c202490e6e836ba5c18998b5bda042f0047a91e00d2e6902feae275
+# CubeSandbox v0.7.2 amd64 release bundle
+da5746dc277418363812aab91ed669cec56c411b77040ee26fb7c2be19d98e21</code></pre></details></section>
+<section id="storage"><span class="num">04 / STORAGE</span><h2>为 Cubelet 准备 reflink XFS</h2><p>cubecow 依赖文件系统的 reflink。新节点系统分区为 ext4，因此创建单独 64 GiB loop XFS 挂载到 <code>/data/cubelet</code>。这是本次 PoC 的布局，不是独立物理数据盘。</p><pre><code># 仅适用于全新目标；任何现有路径都会终止操作
+set -eu
+[ ! -e /data/cubelet ]
+[ ! -e /opt/cube-cluster-node/cubelet.xfs ]
+cp -a /etc/fstab /opt/cube-cluster-node/backups/fstab.before-cube
+mkdir -p /data/cubelet
+truncate -s 64G /opt/cube-cluster-node/cubelet.xfs
+mkfs.xfs -m reflink=1 /opt/cube-cluster-node/cubelet.xfs
+printf '/opt/cube-cluster-node/cubelet.xfs /data/cubelet xfs loop,defaults 0 0\n' &gt;&gt; /etc/fstab
+mount /data/cubelet
+findmnt /data/cubelet
+xfs_info /data/cubelet</code></pre><div class="callout good">已有控制节点的 /data/cubelet 和 /opt/dsh-cube-verify/cubelet.xfs 必须保留。扩容不需要格式化、卸载或重装控制节点。</div></section>
+<section id="control"><span class="num">05 / CONTROL PLANE</span><h2>从空主机到第一台完整节点</h2><p>下面是固定版本的全新控制节点搭建顺序。当前 220 已部署完成，本次扩容没有重新执行控制平面安装。</p><ol><li>完成主机、PVM 与 XFS 准备。</li><li>取得官方 v0.7.2 amd64 one-click release bundle，校验并解压。</li><li>明确 node IP、角色和 API 端口，执行 install.sh。</li><li>核对控制栈、节点注册、MinIO 以及 UI，然后再加 compute。</li></ol><pre><code># 全新控制节点示例；已有平台不要重新执行
+install -d -m 700 /opt/dsh-cube-verify/downloads
+cp /opt/cube-cluster-node/downloads/bundle.tar.gz /opt/dsh-cube-verify/downloads/cube-v0.7.2-cn.tar.gz
+cd /opt/dsh-cube-verify
+tar -xzf downloads/cube-v0.7.2-cn.tar.gz
+cd cube-sandbox-one-click-v0.7.2-amd64
+umask 077
+cat &gt; .env &lt;&lt;'ENV'
+ONE_CLICK_DEPLOY_ROLE=control
+CUBE_SANDBOX_NODE_IP=[220 内网 IP]
+CUBE_PVM_ENABLE=1
+CUBE_API_BIND=0.0.0.0:3100
+CUBE_API_HEALTH_ADDR=127.0.0.1:3100
+ENV
+./install.sh
+./smoke.sh
+cubeopscli node list
+systemctl is-active cube-sandbox-control.target</code></pre><p>本机 3000 已被其它服务使用，当前 CubeAPI 使用 3100。完整默认参数见固定版本的 <code>env.example</code>；可以逐项补充到 .env，但每个键只出现一次。安装器生成的 MinIO/S3 凭据保存在权限受限的运行配置中，后续 compute 使用同一份配置。</p></section>
+<section id="compute"><span class="num">06 / COMPUTE NODE</span><h2>复用同版本材料，加入第二台机器</h2><p>当前控制节点的保留材料位于 <code>/opt/dsh-cube-verify/downloads/</code>。新节点材料位于 <code>/opt/cube-cluster-node/downloads/</code>。通过 SSH 或受控内网传输直接复制到新节点，再比对 SHA-256；不需要把原机 Docker 镜像下载到本地。</p><pre><code># 新节点：先完成前面 PVM、XFS 步骤
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y xfsprogs s3fs e2fsprogs util-linux docker.io \
+  docker-compose libaio1 libnuma1 uuid-runtime nvme-cli jq
+cd /opt/cube-cluster-node
+tar -xzf downloads/bundle.tar.gz
+cd cube-sandbox-one-click-v0.7.2-amd64
+umask 077
+cat &gt; .env &lt;&lt;'ENV'
+ONE_CLICK_DEPLOY_ROLE=compute
+ONE_CLICK_CONTROL_PLANE_IP=[220 内网 IP]
+ONE_CLICK_CONTROL_PLANE_CUBEMASTER_ADDR=[220 内网 IP]:8089
+ONE_CLICK_CONTROL_PLANE_CUBEOPS_ADDR=[220 内网 IP]:3010
+CUBE_SANDBOX_NODE_IP=[118 内网 IP]
+CUBE_PVM_ENABLE=1
+CUBE_SANDBOX_MINIO_ENABLED=0
+ONE_CLICK_ENABLE_TENCENT_DOCKER_MIRROR=0
+ENV</code></pre><p>在本机通过 SSH 管道传递控制节点的 S3 参数，不把凭据输出到终端日志：</p><pre><code># 在操作电脑执行；两端均已配置 SSH 公钥认证
+set -o pipefail
+ssh root@[220 公网 IP] \
+  'grep "^CUBE_S3_" /usr/local/services/cubetoolbox/.one-click.env' \
+| ssh root@[118 公网 IP] \
+  'umask 077; cat &gt;&gt; /opt/cube-cluster-node/cube-sandbox-one-click-v0.7.2-amd64/.env'
+
+# 新节点执行
+cd /opt/cube-cluster-node/cube-sandbox-one-click-v0.7.2-amd64
+chmod 600 .env
+./install-compute.sh
+./smoke.sh
+systemctl is-active cube-sandbox-compute.target \
+  cube-sandbox-cubelet.service cube-sandbox-cube-egress.service</code></pre><div class="callout">v0.7.2 的 toggle 快照读取第一条同名赋值。先 cp env.example，再在末尾追加 CUBE_PVM_ENABLE=1，会保留前面的 0 并触发 PVM 检查失败。使用唯一赋值或原位修改，不要绕过检查。</div><p>Cubelet 启动后自动向 CubeOps 注册，没有单独的 node add 命令。此时检查 220 和 118 都为 HEALTHY=true、SCHEDULING_DISABLED=false、RUNNING。cube-egress 应正常启动，并取得与原模板一致的 CA；不能仅凭 Cubelet 进程存在宣布完成。</p></section>
+<section id="templates"><span class="num">07 / TEMPLATE REPLICAS</span><h2>节点注册完成后，还要补齐模板副本</h2><p>调度过滤器要求目标节点具备可用模板副本。本次将现用工具模板和 DSH runtime 模板分别 redo 到 118；没有重复创建新的模板身份。</p><pre><code># 控制节点；仅重做新节点副本
+cubemastercli --timeout 5m template redo \
+  --template-id tpl-116bc3f778f34bcfad309369 --node [118 内网 IP]
+cubemastercli --timeout 5m template redo \
+  --template-id tpl-c88b653b50d94589b19968a1 --node [118 内网 IP]
+
+cubemastercli template info --template-id tpl-116bc3f778f34bcfad309369
+cubemastercli template info --template-id tpl-c88b653b50d94589b19968a1</code></pre><div class="tablewrap"><table><tr><th>模板别名</th><th>用途</th><th>两台副本</th></tr><tr><td>dsh-cube-poc-v4</td><td>SSH / helper / 工具 B</td><td>READY / READY</td></tr><tr><td>dsh-runtime-pvm-v1</td><td>DSH runtime A</td><td>READY / READY</td></tr></table></div><p>从零搭建 DSH 时，这两个定制模板要先根据项目的 Dockerfile、helper 构建材料和 bootstrap 生成；它们不是 CubeSandbox 官方默认模板。裸 Cube 集群可以先使用自己已构建的模板，本页的两个 ID 只属于当前环境。</p></section>
+<section id="scheduling"><span class="num">08 / PLACEMENT</span><h2>当前调度配置与 DSH 的放置关系</h2><div class="flow"><span>解析模板和资源</span>→<span>健康与约束预筛</span>→<span>CPU / 内存 / 模板 / 并发过滤</span>→<span>候选节点选择</span></div><p>当前服务器的实际配置如下，未启用资源评分，最终候选数为 1：</p><pre><code>scheduler:
+  priority_select_num: 1
+  metric_update_timeout: 300s
+  local_metric_update_timeout: 300s
+  filter:
+    enable_filters:
+      - cpu
+      - mem
+      - template_locality
+      - realtime_create_num</code></pre><p>过滤后取候选列表中的首个可用节点。一次普通 SDK 创建落到 118 证明新节点参与调度，但不证明负载均衡，也不保证每次都落到 118。若要固定工具 B 主机，应在创建层设置明确的节点约束；不能用全局隔离旧节点的方式代替业务放置。</p><details><summary>可选后续：启用资源评分（当前未应用）</summary><p>按官方 v0.7.2 文档，合并下面片段到现有 scheduler 段，保留原过滤器；备份配置，在合适窗口重启 CubeMaster。评分指标是资源配额使用、沙箱数及创建并发，并非简单地读取 top 中的 CPU 百分比。</p><pre><code># 这是建议配置，当前服务器没有应用
+priority_select_num: 2
+score:
+  enable_scorers: [real_time_weighted_average]
+  resource_weights:
+    mvm_num: 2
+    local_create_num: 3
+    quota_cpu_usage: 1
+    quota_mem_usage: 1
+  plugin_conf:
+    real_time_weighted_average:
+      weight: 1.0
+      enable_weight_factors:
+        - mvm_num
+        - local_create_num
+        - quota_cpu_usage
+        - quota_mem_usage</code></pre></details><p>已有 A/B 绑定继续指向原 sandbox ID；扩容不会搬迁实例。每次工具调用连接既有 B，暂停恢复已在新节点验收。删除重建会产生新实例，需要恢复工作区并刷新 binding；本次没有验收持久卷跨节点迁移。</p><p>公开 SDK 没有业务自定义 sandbox ID 参数。使用 metadata 保存 workspace/user 等业务标识，业务层维护稳定名称到实际 ID 的映射；内部同 ID 重建机制主要用于生命周期恢复。</p></section>
+<section id="access"><span class="num">09 / ACCESS</span><h2>管理页面通过 SSH 转发访问</h2><p>WebUI 在控制节点监听 12088，公网该端口未连通。当前使用本机 loopback 转发，验证返回 HTTP 200，无需修改云安全组。</p><pre><code># 操作电脑；前台运行，关闭终端即关闭隧道
+ssh -N -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+  -L 127.0.0.1:12088:127.0.0.1:12088 root@[220 公网 IP]
+
+# 另一个终端检查
+curl -I http://127.0.0.1:12088/</code></pre><p>浏览器打开 <code>http://127.0.0.1:12088/</code>。需要后台隧道时增加 <code>-f</code>；本机端口已占用时可改成 12089。此链接指向读者自己的电脑，并不是本文公开站点提供的管理服务。</p></section>
+<section id="acceptance"><span class="num">10 / RUNTIME EVIDENCE</span><h2>以真实沙箱验证完成，而不是只看节点列表</h2><p>本次用一个定向创建沙箱和一个普通 SDK 自动调度、禁止 public traffic 的沙箱分别验证。两者 HostID 均为 118。</p><div class="checks"><div class="check"><b>✓ SDK 文件</b><p>agent 用户写入 /workspace 后读取，内容完全一致。</p></div><div class="check"><b>✓ 命令与网络</b><p>guest 命令返回成功；HTTPS example.com 返回 200。</p></div><div class="check"><b>✓ 跨节点工具连接</b><p>从 220 经原 CubeProxy 和 WebSocket SSH 读取 118 的 guest 文件。</p></div><div class="check"><b>✓ 暂停与恢复</b><p>暂停后 connect 恢复，同一文件仍可读，主机仍为 118。</p></div></div><p>定向创建客户端耗时 141 ms，仅为本次样本，不作为容量或性能保证。两个测试实例和临时 traffic token、SSH 配置已经清理。原三个实例状态保持，原共享平台 HTTP 200、原 DSH 未授权入口 HTTP 401。</p><pre><code># 控制节点；注意 --all，默认 list 只扫描一个节点
+cubeopscli node list
+cubemastercli cubebox list --all
+
+# 对隔离测试实例运行仓库中的验证脚本
+# 只传入自己创建的专用测试实例；脚本会暂停再恢复它
+source /opt/dsh-cube-verify/poc.env
+export BROKER_STATE_DIR=/opt/dsh-cube-verify/cluster-smoke-state
+/opt/dsh-cube-verify/venv/bin/python \
+  /opt/dsh-cube-verify/cluster-verify-new-node.py TEST_SANDBOX_ID \
+  --expected-host [118 内网 IP] --report /opt/dsh-cube-verify/cluster-validation.json
+# 私有实例需额外 --lease-file 指向本机受限的创建响应凭据文件
+# 检查通过后，只删除本次专用测试实例
+cubemastercli cubebox destroy TEST_SANDBOX_ID</code></pre><div class="callout">持久卷跨节点迁移、主机宕机自动恢复、生产容量和控制平面高可用没有在本次验收。新增节点与模板 READY 不代表这些能力已经完成。</div></section>
+<section id="operations"><span class="num">11 / OPERATIONS</span><h2>保留状态，按层定位故障</h2><div class="tablewrap"><table><tr><th>现象</th><th>先检查</th><th>处理路径</th></tr><tr><td>无 /dev/kvm</td><td>uname -r、lsmod</td><td>确认 PVM 启动项，加载 kvm_pvm；不跳过安装器检查</td></tr><tr><td>新节点不出现</td><td>Cubelet、3010 连通、node IP</td><td>核对 .one-click.env 与 CubeOps 地址</td></tr><tr><td>只调度到旧节点</td><td>模板副本、资源、scheduler</td><td>先补副本，再检查评分与最终候选数</td></tr><tr><td>列表漏掉新节点实例</td><td>CLI 扫描范围</td><td>使用 cubemastercli cubebox list --all</td></tr><tr><td>卷访问失败</td><td>S3 endpoint、凭据、9000、s3fs</td><td>沿用共享配置；不要创建第二套 MinIO 冒充共享存储</td></tr><tr><td>公网 UI 超时</td><td>本机 12088、SSH 隧道</td><td>检查本机转发，不需要重启 Cube 平台</td></tr></table></div><pre><code># 新节点日志
+journalctl -u cube-sandbox-cubelet.service -n 100 --no-pager
+journalctl -u cube-sandbox-cube-egress.service -n 100 --no-pager
+findmnt /data/cubelet
+ls -l /dev/kvm
+
+# 控制节点调度配置位置
+# /usr/local/services/cubetoolbox/CubeMaster/conf.yaml
+# 节点标签与配额位置
+# /usr/local/services/cubetoolbox/Cubelet/dynamicconf/conf.yaml</code></pre><p>原控制节点必须保留完整 /opt/dsh-cube-verify、现有 /data/cubelet、PVM 内核、平台用户数据和恢复归档。备份不等于故障转移：本地 XFS 上的暂停快照与 shared S3 需分别核对。要退出计算节点，先隔离新调度、核对所有活动实例与持久数据，再进行退役；不要直接卸载运行节点。</p></section>
+<section id="references"><span class="num">12 / SOURCES</span><h2>版本、依据与复现边界</h2><p>本页对应 2026-10-12 的已验证部署。控制节点最初安装流程根据当前保留安装材料与官方固定版本文档整理；本次真实执行的是新增 compute、PVM 内核安装、模板补齐和双节点验证。</p><ul><li><a href="https://github.com/TencentCloud/CubeSandbox/releases/tag/v0.7.2">CubeSandbox v0.7.2 release</a></li><li><a href="https://github.com/TencentCloud/CubeSandbox/blob/v0.7.2/deploy/one-click/README.md">固定版本 one-click 与 compute 安装说明</a></li><li><a href="https://github.com/TencentCloud/CubeSandbox/blob/v0.7.2/docs/zh/guide/pvm-deploy.md">PVM 宿主部署与内核发布入口</a></li><li><a href="https://github.com/TencentCloud/CubeSandbox/blob/v0.7.2/docs/zh/guide/cubemaster-scheduler-config.md">调度配置参考</a></li><li><a href="https://github.com/zhchxiao123/dsh-cubesandbox-platform/blob/feat/native-multiuser-web/cluster/RUNBOOK.md">本项目部署记录</a> · <a href="https://github.com/zhchxiao123/dsh-cubesandbox-platform/blob/feat/native-multiuser-web/cluster/scripts/verify-new-node.py">真实验证脚本</a></li></ul><p>凭据、traffic token、私钥、恢复口令及用户配置不包含在本页面中。部署地址与模板 ID 为当前环境事实，复用到其它环境时必须替换。</p></section><footer>CubeSandbox × DSH · 部署手册 · 独立单文件 HTML，无外部脚本或字体依赖。<span aria-live="polite" id="copy-status" role="status"></span></footer></main></div><script>
+for(const pre of document.querySelectorAll('pre')){const button=document.createElement('button');button.className='copy';button.textContent='复制';button.type='button';button.addEventListener('click',async()=>{const text=pre.querySelector('code').textContent;try{if(!navigator.clipboard)throw new Error('clipboard');await navigator.clipboard.writeText(text);button.textContent='已复制';setTimeout(()=>button.textContent='复制',1500)}catch{const range=document.createRange();range.selectNodeContents(pre.querySelector('code'));const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.getElementById('copy-status').textContent='代码已选中，请手动复制。'}});pre.append(button)}document.getElementById('expand').addEventListener('click',event=>{const items=[...document.querySelectorAll('details')];const open=items.some(item=>!item.open);items.forEach(item=>item.open=open);event.target.textContent=open?'收起全部步骤':'展开全部步骤'});const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting){document.querySelectorAll('nav a').forEach(link=>link.classList.toggle('active',link.hash==='#'+entry.target.id))}}},{rootMargin:'-10% 0px -65% 0px'});document.querySelectorAll('main section').forEach(section=>observer.observe(section));window.addEventListener('beforeprint',()=>{document.querySelectorAll('details').forEach(item=>{item.dataset.wasOpen=item.open?'1':'0';item.open=true})});window.addEventListener('afterprint',()=>{document.querySelectorAll('details').forEach(item=>item.open=item.dataset.wasOpen==='1')});
+</script></body></html>

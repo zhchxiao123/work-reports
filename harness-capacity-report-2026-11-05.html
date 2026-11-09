@@ -1,0 +1,1554 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness 与工具沙箱分离：单进程承载能力、openGauss 会话库与 WebSocket 长连接测试报告（2026-11-05/06）</title>
+<!--
+  汇报型单页模版 · briefing-deck
+  左侧目录 + 正文连续滚动 + 右侧标注画笔。零外部依赖,直接用浏览器打开。
+  改法:1) 换 .brand 标题  2) 换 nav.toc 条目(data-sec 要和 section id 一致)
+        3) 按骨架填 section 内容  4) 图号在 .fig-h 里按正文顺序手工排
+  配色语义:box-d 中性/过去 · box-ok 已落地 · box-x 重点/缺口 · 虚线 未落地
+-->
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 24px 96px;
+  }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+
+  .sheet {
+    max-width: 1300px; margin: 0 auto;
+    display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px;
+    align-items: start;
+  }
+
+  /* ── 左侧导航 ─────────────────────────── */
+  .sidenav { position: sticky; top: 28px; }
+
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--clay); margin-bottom: 7px;
+  }
+  .brand-title {
+    font-family: var(--serif); font-weight: 500; font-size: 17px;
+    line-height: 1.4; letter-spacing: -0.01em; color: var(--slate);
+  }
+  .brand-sub {
+    margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500);
+  }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    font-size: 12px; color: var(--gray-500); text-decoration: none;
+    padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px;
+    display: flex; align-items: baseline; gap: 7px; line-height: 1.4;
+    transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+
+  .navhint {
+    margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150);
+    font-size: 10px; line-height: 1.6; color: var(--gray-500);
+  }
+  .navhint kbd {
+    font-family: var(--mono); font-size: 10px; background: var(--gray-150);
+    border: 1px solid var(--gray-300); border-radius: 4px; padding: 1px 4px;
+  }
+
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand { margin-bottom: 16px; padding-bottom: 16px; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+
+  .view { display: none; }
+  .view.on { display: block; }
+
+  /* ── 通用排版 ─────────────────────────── */
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: 33px;
+    letter-spacing: -0.01em; margin-bottom: 12px;
+  }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code {
+    font-family: var(--mono); font-size: 0.88em;
+    background: var(--gray-150); padding: 1px 5px; border-radius: 4px;
+  }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub {
+    font-size: 13.5px; color: var(--gray-700); line-height: 1.7;
+    max-width: 830px; margin-bottom: 22px;
+  }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+
+  /* ── 论点块 ───────────────────────────── */
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--clay); margin-bottom: 14px;
+  }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  .thesis.light { background: #fff; color: var(--slate); border: 1.5px solid var(--gray-300); }
+  .thesis.light p { color: var(--gray-700); }
+  .thesis.light strong { color: var(--slate); }
+  .thesis.light code { background: var(--gray-150); color: var(--rust); }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+
+  .bridge {
+    margin: 42px 0 -14px; padding: 4px 0 4px 20px;
+    border-left: 3px solid var(--clay);
+    font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate);
+  }
+  .bridge b { font-weight: 600; }
+  .bridge .to {
+    display: block; margin-top: 7px;
+    font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400;
+  }
+
+  /* ── 卡片 / 栅格 ──────────────────────── */
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag {
+    font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--gray-150);
+  }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+
+  /* ── 图表容器 ─────────────────────────── */
+  figure {
+    border: 1.5px solid var(--gray-300); border-radius: 14px;
+    background: #fff; padding: 20px 22px 16px; margin-bottom: 16px;
+  }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150);
+    font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+  }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h {
+    font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px;
+    display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+
+  /* ── SVG 图元 ─────────────────────────── */
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .hi   { fill: var(--rust); font-weight: 600; }
+  .rf .okx  { fill: var(--olive); font-weight: 600; }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+
+  /* ── 主流程图 ─────────────────────────── */
+  .canvas {
+    border: 1.5px solid var(--gray-300); border-radius: 14px;
+    background: #fff; padding: 26px; overflow-x: auto;
+  }
+  .canvas-grid {
+    display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr);
+    gap: 26px; align-items: start;
+  }
+  @media (max-width: 1080px) { .canvas-grid { grid-template-columns: 1fr; gap: 20px; } }
+  .cv-side { display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+  svg.flow { display: block; width: 100%; height: auto; max-width: 620px; margin: 0 auto; }
+  .flow text { font-family: var(--sans); font-size: 13px; fill: var(--slate); }
+  .flow .code { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .flow .sub  { font-size: 11px; fill: var(--gray-700); }
+  .flow .lbl  { font-size: 10px; font-family: var(--mono); fill: var(--gray-500); }
+  .node rect      { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; rx: 8; }
+  .node.term rect { fill: var(--gray-150); rx: 24; }
+  .node.ok rect   { fill: rgba(120,140,93,0.12); stroke: var(--olive); }
+  .node.gate path { fill: #fff; stroke: var(--clay); stroke-width: 1.5; }
+  .edge        { stroke: var(--gray-500); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+  .edge.rework { stroke: var(--rust); stroke-dasharray: 4 4; marker-end: url(#arrow-rust); }
+  .edge.express{ stroke: var(--olive); stroke-dasharray: 6 4; marker-end: url(#arrow-olive); }
+
+  /* ── 两层分隔 + 跨卡片资产层 ───────────── */
+  .planes {
+    margin: 0 0 14px; border-top: 1.5px dashed var(--gray-300);
+    border-bottom: 1.5px dashed var(--gray-300); padding: 9px 0;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .planes span { font-size: 11.5px; color: var(--gray-500); display: flex; align-items: baseline; gap: 7px; }
+  .planes b { color: var(--slate); font-weight: 600; font-size: 12px; }
+  .planes .ar { font-family: var(--mono); color: var(--clay); }
+
+  .assets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 1080px) { .assets { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 760px)  { .assets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .asset .a-name { white-space: normal; }
+  .asset {
+    border: 1.5px solid var(--gray-300); border-radius: 10px; background: #fff;
+    padding: 10px 10px 9px; display: flex; flex-direction: column; gap: 5px; min-width: 0;
+  }
+  .asset.run { border-style: dashed; border-color: var(--olive); background: rgba(120,140,93,0.06); }
+  .asset .a-top { display: flex; align-items: center; gap: 4px; }
+  .asset .a-name { font-size: 12.5px; font-weight: 600; color: var(--slate); line-height: 1.3; white-space: nowrap; }
+  .asset.run .a-name { font-size: 12px; font-family: var(--mono); }
+  .asset .a-layer {
+    align-self: flex-start; font-size: 10px; font-family: var(--mono);
+    color: var(--gray-500); background: var(--gray-150); border-radius: 4px; padding: 1px 5px;
+  }
+  .asset.run .a-layer { background: rgba(120,140,93,0.16); color: var(--olive); }
+  .asset .a-path {
+    font-family: var(--mono); font-size: 10.5px; color: var(--rust);
+    overflow-wrap: anywhere; line-height: 1.45;
+  }
+  .asset .a-rw { font-size: 10.5px; color: var(--gray-700); line-height: 1.55; }
+  .asset .a-rw em { font-style: normal; color: var(--gray-500); font-family: var(--mono); margin-right: 3px; }
+
+  .legend.in-canvas {
+    margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--gray-150);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.gate { transform: rotate(45deg); width: 11px; height: 11px; border-radius: 2px; border-color: var(--clay); }
+  .chip.line { height: 0; border: none; border-top: 2px dashed var(--rust); border-radius: 0; }
+  .chip.line.express { border-top-color: var(--olive); }
+  .chip.ok { background: rgba(120,140,93,0.12); border-color: var(--olive); }
+  .chip.cross { border-radius: 3px; }
+  .chip.cross.run { border-style: dashed; border-color: var(--olive); background: rgba(120,140,93,0.06); }
+
+  /* ── 表格 ─────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left; font-weight: 600; color: var(--gray-700);
+    border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  .col-old { color: var(--gray-500); }
+  .st { font-family: var(--mono); font-size: 11px; color: var(--gray-500); white-space: nowrap; }
+  .who { white-space: nowrap; }
+
+  .delta {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150);
+    font-size: 12.5px; line-height: 1.8; color: var(--gray-700);
+  }
+  .delta b { color: var(--slate); }
+
+  /* ── 清单 ─────────────────────────────── */
+  ul.rkv { list-style: none; }
+  ul.rkv li {
+    font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+    padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150);
+  }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+
+  /* ── 走查:一张卡的一生 ────────────────── */
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li {
+    counter-increment: tr; position: relative;
+    border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff;
+    padding: 15px 18px 13px 52px; margin-bottom: 10px;
+  }
+  ol.trace > li::before {
+    content: counter(tr); position: absolute; left: 16px; top: 15px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px; color: var(--gray-700);
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.trace > li:not(:last-child)::after {
+    content: ""; position: absolute; left: 27.5px; top: 43px;
+    height: calc(100% - 32px); width: 1.5px; background: var(--gray-150);
+  }
+  ol.trace > li.human { border-color: var(--clay); background: rgba(217,119,87,0.04); }
+  ol.trace > li.human::before { background: rgba(217,119,87,0.16); border-color: var(--clay); color: var(--rust); }
+
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage {
+    font-family: var(--mono); font-size: 10.5px; color: var(--gray-700);
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+  }
+  .tr-flag {
+    margin-left: auto; font-family: var(--mono); font-size: 10px; white-space: nowrap;
+    border-radius: 999px; padding: 2px 10px;
+    background: rgba(217,119,87,0.14); border: 1px solid var(--clay); color: var(--rust); font-weight: 600;
+  }
+  .tr-flag.auto { background: var(--gray-150); border-color: var(--gray-300); color: var(--gray-500); font-weight: 400; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block {
+    background: var(--gray-150); border-radius: 7px; padding: 7px 11px;
+    font-size: 12px; color: var(--gray-700); margin-top: 9px;
+  }
+  ol.trace > li.human .tr-body .tr-block { background: #fff; border: 1px solid var(--oat); }
+  @media (max-width: 640px) { .tr-flag { margin-left: 0; } }
+
+  /* ── 实际用例:跳转卡 + 数字块 ──────────── */
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 30px; }
+  @media (max-width: 760px) { .links { grid-template-columns: 1fr; } }
+  a.linkcard {
+    display: block; text-decoration: none; border: 1.5px solid var(--gray-300);
+    border-radius: 14px; background: #fff; padding: 18px 20px 16px;
+    transition: transform 120ms ease, border-color 120ms ease;
+  }
+  a.linkcard:hover { transform: translateY(-2px); border-color: var(--clay); }
+  a.linkcard .lk-kind {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--clay); margin-bottom: 8px;
+  }
+  a.linkcard .lk-name { font-family: var(--serif); font-size: 19px; font-weight: 500; color: var(--slate); margin-bottom: 5px; }
+  a.linkcard .lk-desc { font-size: 12.5px; line-height: 1.6; color: var(--gray-700); margin-bottom: 10px; }
+  a.linkcard .lk-url {
+    font-family: var(--mono); font-size: 11px; color: var(--rust);
+    overflow-wrap: anywhere; line-height: 1.45; border-top: 1px solid var(--gray-150); padding-top: 9px;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+
+  .evtable td:first-child { font-weight: 600; color: var(--slate); white-space: normal; }
+  .ev { font-family: var(--mono); font-size: 11px; color: var(--rust); }
+  blockquote.raw {
+    border-left: 3px solid var(--oat); background: var(--gray-150);
+    border-radius: 0 8px 8px 0; padding: 11px 15px; margin: 12px 0;
+    font-size: 12.5px; line-height: 1.75; color: var(--gray-700);
+  }
+  blockquote.raw b { color: var(--slate); }
+
+
+  /* ── 标注画笔 ─────────────────────────── */
+  #annLayer {
+    position: absolute; top: 0; left: 0; z-index: 40;
+    pointer-events: none; overflow: visible;
+  }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+
+  .ann-bar {
+    position: fixed; right: 10px; top: 50%; transform: translateY(-50%);
+    z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+    background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px;
+    padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12);
+    width: 74px; opacity: 0.94;
+  }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button {
+    font-family: inherit; font-size: 11px; color: var(--gray-700);
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] {
+    width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300);
+    border-radius: 7px; background: none; cursor: pointer;
+  }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+
+  .ann-launch {
+    position: fixed; right: 10px; top: 50%; transform: translateY(-50%);
+    z-index: 60; display: none;
+    font-family: inherit; font-size: 12px; color: var(--gray-700);
+    background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px;
+    padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12);
+    writing-mode: vertical-rl; letter-spacing: 0.1em;
+  }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+
+  @media (max-width: 980px) {
+    .ann-bar { width: 72px; padding: 8px 6px; right: 8px; }
+    .ann-bar button { font-size: 11px; padding: 5px 2px; }
+  }
+
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+
+  /* ── 状态徽标 ─────────────────────────── */
+  .badge {
+    font-family: var(--mono); font-size: 10px; border-radius: 999px;
+    padding: 2px 9px; white-space: nowrap; display: inline-block;
+  }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+
+  /* ── 引用块 ───────────────────────────── */
+  .quote {
+    border-left: 3px solid var(--clay); padding: 6px 0 6px 18px; margin: 18px 0;
+    font-size: 14px; line-height: 1.75; color: var(--slate); font-family: var(--serif);
+  }
+  .quote cite { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-500); font-style: normal; margin-top: 8px; }
+
+  .srcbar {
+    border: 1.5px solid var(--oat); background: #fff; border-radius: 12px;
+    padding: 14px 18px; font-size: 12.5px; line-height: 1.7; color: var(--gray-700);
+  }
+  .srcbar a { color: var(--rust); text-decoration: none; border-bottom: 1px solid var(--clay); word-break: break-all; }
+  .srcbar b { color: var(--slate); }
+
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+
+  .before { color: var(--rust); font-weight: 600; }
+  .after  { color: var(--olive); font-weight: 600; }
+  table.data td, table.data th { white-space: nowrap; }
+  table.data td.wrap { white-space: normal; }
+  table.data td:first-child { white-space: nowrap; }
+  .tblwrap { overflow-x: auto; }
+  .kv td:first-child { width: 190px; }
+  .small { font-size: 11.5px; color: var(--gray-500); }
+  .pill { font-family: var(--mono); font-size: 10.5px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--gray-300); background: var(--gray-150); color: var(--gray-700); white-space: nowrap; }
+  .pill.ok { border-color: var(--olive); background: rgba(120,140,93,0.12); color: var(--olive); }
+  .pill.bad { border-color: var(--rust); background: rgba(176,74,63,0.10); color: var(--rust); }
+  .pill.mid { border-color: var(--clay); background: rgba(217,119,87,0.10); color: var(--rust); }
+  section h3.sh { font-family: var(--serif); font-weight: 500; font-size: 18px; margin: 26px 0 10px; }
+  pre.cmd { font-family: var(--mono); font-size: 11px; background: var(--gray-150); border-radius: 8px; padding: 10px 12px; overflow-x: auto; line-height: 1.6; color: var(--gray-700); }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button>
+  <span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen" title="画笔">画笔</button>
+  <button class="ann-tool" data-tool="mark" title="荧光笔">荧光笔</button>
+  <button class="ann-tool" data-tool="eraser" title="橡皮擦">橡皮擦</button>
+  <span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757" title="颜色">
+  <input type="range" id="annSize" min="2" max="26" value="4" title="粗细">
+  <span class="sep"></span>
+  <button id="annUndo">撤销</button>
+  <button id="annClear">清空</button>
+  <button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch" title="展开标注工具">✎ 标注</button>
+
+
+<div class="sheet">
+  <aside class="sidenav">
+    <div class="brand">
+      <div class="brand-eyebrow">测试报告</div>
+      <div class="brand-title">Harness 与工具沙箱分离<br>承载能力 · 会话库 · 长连接</div>
+      <div class="brand-sub">2026-11-05 / 06 · 220 / 118</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#s-sum" data-sec="s-sum"><span class="num">01</span><span>结论摘要</span></a>
+      <a href="#s-goal" data-sec="s-goal"><span class="num">02</span><span>目标与范围</span></a>
+      <a href="#s-env" data-sec="s-env"><span class="num">03</span><span>测试环境</span></a>
+      <a href="#s-method" data-sec="s-method"><span class="num">04</span><span>测试方法</span></a>
+      <a href="#s-before" data-sec="s-before"><span class="num">05</span><span>优化前结果</span></a>
+      <a href="#s-cause" data-sec="s-cause"><span class="num">06</span><span>原因分析</span></a>
+      <a href="#s-change" data-sec="s-change"><span class="num">07</span><span>优化内容</span></a>
+      <a href="#s-after" data-sec="s-after"><span class="num">08</span><span>优化后结果与对比</span></a>
+      <a href="#s-func" data-sec="s-func"><span class="num">09</span><span>功能回归</span></a>
+      <a href="#s-db" data-sec="s-db"><span class="num">10</span><span>会话库压测</span></a>
+      <a href="#s-ws" data-sec="s-ws"><span class="num">11</span><span>长连接测试</span></a>
+      <a href="#s-issue" data-sec="s-issue"><span class="num">12</span><span>发现的问题</span></a>
+      <a href="#s-limit" data-sec="s-limit"><span class="num">13</span><span>局限性</span></a>
+      <a href="#s-next" data-sec="s-next"><span class="num">14</span><span>结论与下一步</span></a>
+      <a href="#s-appx" data-sec="s-appx"><span class="num">15</span><span>附录</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 右侧可开启标注</div>
+  </aside>
+  <main class="main">
+
+  <section id="s-sum" style="margin-top:4px">
+    <header>
+      <div class="eyebrow">ByClaw · harness 承载能力 · openGauss 会话库 · WebSocket 长连接 · 2026-11-05 / 06</div>
+      <h1>一个 harness 进程能扛多少同时在对话的用户</h1>
+      <p class="lead">工具沙箱分离（A/B 分离）场景下，把共享宿主（harness A）单独放在 220，其余全部放在 118，用真实模型 MiniMax-M3.1-Flash、真实链路（主助手 → 委派数字员工 → 在用户自己的工具沙箱 B 上执行 bash）压测。先测出原始上限，剖析主线程，做了三处优化，再测一遍，并用 7 个代码和文件用例做了优化前后的功能对照。最后单独压测了 openGauss 会话库（写入容量、单用户大量会话、与 BE 混合负载），以及 harness 能承载的 WebSocket 长连接数。</p>
+    </header>
+    <div class="thesis">
+      <div class="t-kicker">结论</div>
+      <div class="t-main">单个 harness 进程从约 <em>10–12 人</em> 同时活跃，提升到 <em>50 人</em> 全部可用，主线程还剩约 20% 余量</div>
+      <p><strong>优化前</strong>：瓶颈是 harness 的单个主线程。10 人时主线程空闲只有 0.8%，15 人时首词 p50 变成 18 s，20 人时 43% 的轮次超时。根因是 DSH 里两段"一个进程一个用户"的写法：每查一个工具就重建整张工具表；委派工具放在全进程共享的集合里，每一步遍历所有用户的定义。</p>
+      <p><strong>优化后</strong>（分支 <code>perf/harness-single-thread</code>，3 个提交，未推送）：10 人时主线程空闲 71%；50 人并发 97/100 轮成功，第 2 轮起 50/50 成功，稳态首词 p50 8.6 s；功能回归 7 个用例结果与优化前一致。</p>
+      <p><strong>还没到真正上限</strong>：50 人以上没测，卡在支撑机 118 的内存（50 个工具沙箱后只剩 1.8 GB）。另外发现 BE 死锁、平台沙箱上限 30、Node 默认堆过小、分离模式下 grep/glob 不可用等问题，详见第 12 节。</p>
+      <p><strong>长连接</strong>：现在每条到工具沙箱的连接是一个 ssh 进程加一个 ws-proxy 进程，实测每条约 14 MB，500 条时延迟和 CPU 都正常，上限由内存决定；同样的连接放在一个 Node 进程里只要约 40 KB/条，单进程实测 3.3 万条。还发现每断开一条连接留下一个僵尸进程，已在分支修复（详见第 11 节）。</p>
+      <p><strong>会话库不是瓶颈</strong>：openGauss 单机（8 核测试机）在 4000 个会话同时写入时 p99 88 ms，拐点在 4000–5000 个会话，约合 6000–7000 个活跃用户；一个用户 2 万个会话时列表与恢复仍在百毫秒级。同一个库上，每个活跃用户在 BE 侧的开销约是会话写入的 14 倍，<b>先压满数据库的会是 BE</b>（详见第 10 节）。</p>
+    </div>
+    <div class="stats" style="margin-top:16px">
+      <div class="stat"><div class="s-num">0.8% → 71%</div><div class="s-lab">10 人并发时主线程空闲</div><div class="s-sub">CPU 剖析 150 s</div></div>
+      <div class="stat hot"><div class="s-num">10.3 → 3.3<em> s</em></div><div class="s-lab">10 人稳态首词 p50</div><div class="s-sub">第 2 轮起</div></div>
+      <div class="stat"><div class="s-num">23/40 → 40/40</div><div class="s-lab">20 人并发的成功轮次</div><div class="s-sub">超时 240 s</div></div>
+      <div class="stat"><div class="s-num">50 <em>人</em></div><div class="s-lab">优化后实测并发，97/100 成功</div><div class="s-sub">主线程空闲仍有 22.7%</div></div>
+    </div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><div class="s-num">88<em> ms</em></div><div class="s-lab">4000 个会话同时写入的 p99</div><div class="s-sub">1394 事务/秒，0 错误</div></div>
+      <div class="stat hot"><div class="s-num">6000–7000</div><div class="s-lab">会话库饱和前约合活跃用户</div><div class="s-sub">按实测 0.24 事务/秒/人</div></div>
+      <div class="stat"><div class="s-num">70–119<em> ms</em></div><div class="s-lab">列出一个用户的 21,031 个会话</div><div class="s-sub">84.7 万条事件</div></div>
+      <div class="stat"><div class="s-num">≈14×</div><div class="s-lab">BE 对会话写入的数据库开销</div><div class="s-sub">每活跃用户，按 CPU 估算</div></div>
+    </div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><div class="s-num">14<em> MB</em></div><div class="s-lab">现在每条到工具沙箱的连接</div><div class="s-sub">ssh + ws-proxy 两个进程</div></div>
+      <div class="stat"><div class="s-num">500 <em>条</em></div><div class="s-lab">实测同时保持，零失败</div><div class="s-sub">命令往返 p99 23 ms</div></div>
+      <div class="stat hot"><div class="s-num">40<em> KB</em></div><div class="s-lab">连接放进同一进程时每条</div><div class="s-sub">单进程实测 3.3 万条</div></div>
+      <div class="stat"><div class="s-num">479 → 0</div><div class="s-lab">关 500 条后的僵尸进程</div><div class="s-sub">修复：byclaw-pid1</div></div>
+    </div>
+  </section>
+
+  <section id="s-goal">
+    <h2><span class="n">02</span>测试目标与范围</h2>
+    <p class="sub">回答一个问题：harness 和工具沙箱分离后，<b>一个 harness 进程</b>最多能承载多少同时在对话、并且都要用工具沙箱的用户；瓶颈在哪里。</p>
+    <div class="g2">
+      <div class="card"><h3>在范围内</h3><div class="tag">本次测了</div>
+        <ul class="rkv">
+          <li><b>单个共享宿主进程</b>的并发承载：5–50 人同时活跃</li>
+          <li>首词、整轮耗时、工具往返，以及 BE / harness / 模型各占多少</li>
+          <li>harness 的 CPU、内存，常驻用户数上限，冷启动</li>
+          <li>openGauss 会话库：写入容量、单用户大量会话的写入与读取、与 BE 的混合负载</li>
+          <li>WebSocket 长连接：现有形态下一个 harness 能持有的到工具沙箱的连接数，以及连接放进同一进程时的上限</li>
+          <li>主线程 CPU 剖析，以及针对热点的三项优化</li>
+          <li>代码和文件类功能在优化前后是否一致</li>
+        </ul></div>
+      <div class="card"><h3>不在范围内</h3><div class="tag">本次没测</div>
+        <ul class="rkv">
+          <li>多个 harness 进程 / 宿主池（BE 目前只能指向一个宿主）</li>
+          <li>30–60 分钟长稳（单段压测都在 10 分钟以内）</li>
+          <li>50 人以上（支撑机内存不够放更多工具沙箱）</li>
+          <li>浏览器、Unity 等其他工具沙箱能力</li>
+          <li>线上 ACS / ALB / NAS 环境（229 只读，未动）</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <section id="s-env">
+    <h2><span class="n">03</span>测试环境</h2>
+    <p class="sub">两台同配置的阿里云 ECS，同一 VPC 内网互通。220 只跑 harness，这样它的 CPU 和内存全算在 harness 头上；BE、数据库、Redis、平台、所有工具沙箱、压测客户端都在 118。</p>
+    <figure>
+      <div class="fig-h">图 1 <span>拓扑与数据流</span></div>
+      <svg class="rf" viewBox="0 0 900 380" role="img">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:#87867F"/></marker></defs>
+<rect class="box-x" x="20" y="40" width="250" height="300" rx="12"/>
+<text x="36" y="66" style="font-weight:600;font-size:13px">被测机 220（[220 公网 IP]）</text>
+<text class="mono" x="36" y="84">内网 [220 内网 IP] · 8 vCPU / 14.8 GB</text>
+<rect class="box" x="40" y="104" width="210" height="150" rx="9"/>
+<text x="54" y="128" style="font-weight:600">byclaw-multi-host</text>
+<text class="lab" x="54" y="148">共享宿主（harness A）</text>
+<text class="lab" x="54" y="166">单个 Node 进程 · 所有用户上下文</text>
+<text class="lab" x="54" y="184">会话日志 → openGauss</text>
+<text class="mono" x="54" y="204">admin :7300</text>
+<text class="mono" x="54" y="220">每用户：ws 代理 + 代码图谱桥</text>
+<text class="mono" x="54" y="236">cdp-profile / mon220 采样</text>
+<text class="tiny" x="40" y="282">机器上只跑这一个容器；</text>
+<text class="tiny" x="40" y="298">Cube 沙箱与其他容器已全部停用</text>
+<rect class="box-d" x="330" y="20" width="550" height="340" rx="12"/>
+<text x="346" y="42" style="font-weight:600;font-size:13px">支撑机 118（[118 公网 IP]）</text>
+<text class="mono" x="346" y="58">内网 [118 内网 IP] · 8 vCPU / 14.8 GB</text>
+<rect class="box" x="350" y="82" width="150" height="56" rx="8"/><text x="362" y="104" style="font-weight:600">BE</text><text class="mono" x="362" y="122">:8086 HTTP · :8082 WS</text>
+<rect class="box" x="520" y="82" width="160" height="56" rx="8"/><text x="532" y="104" style="font-weight:600">bench-ingress（nginx）</text><text class="mono" x="532" y="122">:18086 代替 ALB</text>
+<rect class="box" x="700" y="82" width="160" height="56" rx="8"/><text x="712" y="104" style="font-weight:600">压测客户端 + 采样</text><text class="mono" x="712" y="122">/opt/perf（node 22）</text>
+<rect class="box" x="350" y="160" width="150" height="50" rx="8"/><text x="362" y="182" style="font-weight:600">openGauss 6.0.3</text><text class="mono" x="362" y="198">:5432 业务库 + 会话库</text>
+<rect class="box" x="520" y="160" width="160" height="50" rx="8"/><text x="532" y="182" style="font-weight:600">Redis 7.4.9</text><text class="mono" x="532" y="198">:6379 消息流 / 注册表</text>
+<rect class="box" x="700" y="160" width="160" height="50" rx="8"/><text x="712" y="182" style="font-weight:600">平台 + opensandbox</text><text class="mono" x="712" y="198">:8087 · :9005 v0.1.9</text>
+<rect class="box-ok" x="350" y="232" width="510" height="72" rx="9"/>
+<text x="364" y="254" style="font-weight:600">工具沙箱 B（每用户一个 Docker 容器）</text>
+<text class="lab" x="364" y="274">byclaw-harness-tools:parity · 1 CPU / 2 GiB 上限 · ws-bridge :8080 映射到宿主端口</text>
+<text class="lab" x="364" y="292">空闲约 70–85 MB / 个 · 压测时最多 50 个</text>
+<text class="tiny" x="350" y="330">MiniMax-M3.1-Flash（api.minimaxi.com）由 220 上的 harness 直连公网调用</text>
+<path class="ln" d="M350,115 L254,115" marker-end="url(#ar)"/>
+<text class="tiny" x="258" y="109">PUT 用户上下文</text>
+<path class="ln" d="M250,149 L596,149 L596,141" marker-end="url(#ar)"/>
+<text class="tiny" x="258" y="144">经 ingress :18086</text>
+<text class="tiny" x="258" y="160">BE API + A→B</text>
+<path class="ln" d="M520,110 L503,110" marker-end="url(#ar)"/>
+<path class="ln-d" d="M680,128 L690,128 L690,229" marker-end="url(#ar)"/>
+<text class="tiny" x="697" y="224" style="fill:#B04A3F">A→B：ws-bridge（ssh over ws）</text>
+<path class="ln" d="M250,185 L347,185" marker-end="url(#ar)"/>
+<text class="tiny" x="258" y="179">会话库 · Redis</text>
+<path class="ln" d="M780,82 L780,74 L425,74 L425,79" marker-end="url(#ar)"/>
+<text class="tiny" x="660" y="69">登录 + 聊天 WebSocket</text>
+</svg>
+      <figcaption><b>A→B 走 ws-bridge。</b>220 无法直连 118 上的容器 IP（阿里云 VPC 会丢弃，实测过），所以 harness 通过 BE 返回的入口路径 <code>/v1/sandboxes/&lt;id&gt;/proxy/8080</code> 连 B。118 的 BE 会因缺少签名拒绝这个路径（229 上由 ALB 处理），测试中用一个 nginx（bench-ingress）代替 ALB：该路径转到对应 B 容器，其余转给 BE。</figcaption>
+    </figure>
+
+    <h3 class="sh">硬件与系统</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>项目</th><th>220（被测机）</th><th>118（支撑机）</th></tr>
+      <tr><td>公网 / 内网</td><td>[220 公网 IP] / [220 内网 IP]</td><td>[118 公网 IP] / [118 内网 IP]</td></tr>
+      <tr><td>CPU</td><td>Intel Xeon Platinum，8 vCPU</td><td>Intel Xeon Platinum，8 vCPU</td></tr>
+      <tr><td>内存</td><td>15197 MB，无 swap</td><td>15197 MB</td></tr>
+      <tr><td>磁盘</td><td>197 GB（测试前清理到 53%）</td><td>197 GB（约 78–92%）</td></tr>
+      <tr><td>系统</td><td>Ubuntu 22.04.5，内核 6.6.69，Docker 29.1.3</td><td>同左</td></tr>
+      <tr><td>机器上运行的</td><td>仅 byclaw-multi-host 一个容器</td><td>BE、平台、opensandbox、openGauss、Redis、MinIO、FE、bench-ingress、工具沙箱</td></tr>
+    </table></div>
+
+    <h3 class="sh">软件版本</h3>
+    <div class="card tblwrap"><table class="data kv">
+      <tr><td>harness 镜像</td><td class="wrap"><code>[内部镜像仓库]/byclaw/byclaw-harness:0.2.1-rc.2</code>，与 118、229 相同，并叠加 118 当前的插件库（含会话入库插件）</td></tr>
+      <tr><td>DSH / Node</td><td class="wrap">DSH 0.2.1-rc.2（宿主经 tsx 直接加载 <code>src</code>），Node v22.19.0</td></tr>
+      <tr><td>会话入库</td><td class="wrap">分支 <code>feat/dsh-session-db-d060</code>（2 个提交，基于 origin/D0.6.0，与 118 运行的插件逐字节一致）；测试用户全部开启</td></tr>
+      <tr><td>优化代码</td><td class="wrap">分支 <code>perf/harness-single-thread</code>：<code>3c8f33509</code>、<code>31763231f</code>、<code>d4e65d6fc</code>（基于 origin/D0.6.0 <code>b221a8cb4</code>）</td></tr>
+      <tr><td>工具沙箱 B</td><td class="wrap">规格 <code>byclaw-dsh-tools</code>，镜像 <code>byclaw-harness-tools:parity</code>，上限 1 CPU / 2 GiB，ws-bridge 8080，Node v22.19.0</td></tr>
+      <tr><td>BE / 平台</td><td class="wrap"><code>byclaw-be:parity-tsbu</code> / <code>byclaw-platform:D0.6.0</code>，opensandbox server v0.1.9</td></tr>
+      <tr><td>数据库 / 缓存</td><td class="wrap">openGauss 6.0.3（max_connections 200，shared_buffers 1 GB）/ Redis 7.4.9</td></tr>
+      <tr><td>模型</td><td class="wrap">MiniMax-M3.1-Flash（OpenAI 协议，api.minimaxi.com），主助手和子员工都用它</td></tr>
+    </table></div>
+
+    <h3 class="sh">为测试调整的配置</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>位置</th><th>项</th><th>原值</th><th>测试值</th><th>原因</th></tr>
+      <tr><td>118 BE</td><td><code>BYCLAW_MULTI_HOST_PUBLIC_BASE_URL</code></td><td class="col-old">byclaw-multi-host:7300</td><td>[220 内网 IP]:7300</td><td class="wrap">BE 指向 220 上的宿主</td></tr>
+      <tr><td>118</td><td>自己的 byclaw-multi-host</td><td class="col-old">运行</td><td>停止</td><td class="wrap">避免两个宿主抢用户</td></tr>
+      <tr><td>118</td><td>byclaw-bench-ingress</td><td class="col-old">无</td><td>nginx :18086</td><td class="wrap">代替 ALB，转发 A→B</td></tr>
+      <tr><td>118 系统参数</td><td>默认 LLM</td><td class="col-old">11220698 deepseek-flash</td><td>11000161 MiniMax-M3.1-Flash</td><td class="wrap">原默认模型返回 405，子员工会落到它上面</td></tr>
+      <tr><td>118 系统参数</td><td><code>ENABLE_USE_SANDBOX_NUM</code></td><td class="col-old">30</td><td>200</td><td class="wrap">平台全局最多 30 个运行中沙箱</td></tr>
+      <tr><td>118 系统参数</td><td><code>BYCLAW_SHARED_DSH_HOST_USERS</code></td><td class="col-old">6 个用户</td><td>+ bench001–bench100</td><td class="wrap">测试用户走共享宿主</td></tr>
+      <tr><td>118 openGauss</td><td><code>instr_unique_sql_count</code></td><td class="col-old">100</td><td>5000</td><td class="wrap">原值已满，会话语句统计不进来</td></tr>
+      <tr><td>220 host.env</td><td>BE / 会话库地址</td><td class="col-old">容器名</td><td>118 内网 IP（BE 经 :18086）</td><td class="wrap">跨机</td></tr>
+      <tr><td>220 host.env</td><td><code>BYCLAW_TOOL_ENV_SSH_INSTANCE</code> / <code>HOST_TEMPLATE</code></td><td class="col-old">ssh / sandbox-{{id}}</td><td>ws-bridge / 空</td><td class="wrap">用 BE 返回的 ws 入口</td></tr>
+      <tr><td>220 host.env</td><td><code>NODE_OPTIONS</code></td><td class="col-old">无（堆约 2 GB）</td><td>优化前：堆 10 GB；优化后：再加两个参数</td><td class="wrap">默认堆约 25 个常驻时溢出</td></tr>
+    </table>
+    <div class="delta">测试期间 118 停掉的无关容器：demo、super、qa-worker、qa-manager、new-api（3 个）、node-relay、cube-egress、mock-login，以及两个旧沙箱。原值和恢复清单在 118 <code>[主机备份目录]</code>。220 测试前停掉并删除了全部容器、镜像和构建缓存，Cube 沙箱服务全部停用并取消自启，清单在 220 <code>[主机备份目录]</code>。</div></div>
+
+    <h3 class="sh">测试数据</h3>
+    <ul class="rkv">
+      <li><b>用户</b>：通过 BE <code>/system/user/addUser</code> 建 bench001–bench100（组织 220、岗位 2），密码统一 <code>Bench@2026</code>；脚本用 <code>loginByUsername</code> 登录。</li>
+      <li><b>常驻上下文</b>：每轮压测前按顺序逐个登录预热 50 个用户（登录时 BE 会预热宿主上下文），等宿主报告 ready 再进入下一个。</li>
+      <li><b>数字员工</b>：沿用 118 上从 229 复制来的员工与专家团配置，没有为测试专门调整。</li>
+    </ul>
+  </section>
+
+  <section id="s-method">
+    <h2><span class="n">04</span>测试方法</h2>
+    <p class="sub">真实链路、真实模型；每段压测控制在 10 分钟以内，压测前先预热常驻用户；同一组指标在优化前后各测一遍。</p>
+    <div class="g2">
+      <div class="card"><h3>负载</h3><div class="tag">每个虚拟用户的一轮对话</div>
+        <p>发送：<code>用 bash 执行 hostname &amp;&amp; date，然后用一句话告诉我结果。</code></p>
+        <p style="margin-top:8px">主助手是路由，没有 bash，会查资源、实例化数字员工；员工在该用户的工具沙箱 B 上执行 bash，再回报。每轮 2–12 次工具调用、2 层 agent，整轮 30–100 s。这是真实业务路径，不是简化负载。</p>
+        <p style="margin-top:8px">每段 N 个用户同时开始（间隔 150–500 ms 错开），每人连续 2 轮（5 人档 3 轮），轮间隔 5 s，单轮超时 240 s。</p></div>
+      <div class="card"><h3>指标定义</h3><div class="tag">均从客户端发出消息开始计时</div>
+        <table class="data">
+          <tr><th>指标</th><th>含义</th></tr>
+          <tr><td>首词</td><td class="wrap">收到第一个模型生成的字（思考或回答），不算 BE 的状态提示</td></tr>
+          <tr><td>BE 转发</td><td class="wrap">发出 → harness 记录 turn/start（会话库事件时间）</td></tr>
+          <tr><td>harness 准备</td><td class="wrap">turn/start → 发出第一个模型请求（request/header）</td></tr>
+          <tr><td>模型首字</td><td class="wrap">首词 − (BE 转发 + harness 准备)，含回传</td></tr>
+          <tr><td>bash 往返</td><td class="wrap">第一次工具调用 → 其结果到达客户端</td></tr>
+          <tr><td>稳态</td><td class="wrap">第 2 轮起：排除登录风暴和工具沙箱冷启动</td></tr>
+        </table></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3>采样与工具</h3><div class="tag">脚本都在附录列出的目录</div>
+      <ul class="rkv">
+        <li><b>220</b>：每 5 s 采容器 cgroup CPU、内存、主进程 RSS、Node 进程数、宿主 ready 用户数（<code>mon220.sh</code>）。</li>
+        <li><b>118</b>：每 10 s 采各容器 CPU/内存、B 数量与内存、Redis ops/连接、openGauss 连接与卡住事务（<code>mon118.sh</code>）。</li>
+        <li><b>数据库</b>：每段前后各取一次 <code>dbe_perf.statement</code> 快照，算出会话语句的调用次数、平均和最大耗时（<code>dbsnap.sh</code>）。</li>
+        <li><b>主线程剖析</b>：对运行中的宿主发 SIGUSR1 打开 inspector，用 CDP Profiler 以 1 ms 间隔采样 150 s（<code>cdp-profile.mjs</code>），不重启、不丢常驻上下文。</li>
+        <li><b>耗时拆解</b>：把客户端计时与 openGauss 里的会话事件时间戳对齐（两台机器 NTP 同步）（<code>analyze.py</code>）。</li>
+      </ul></div>
+    <div class="note" style="margin-top:16px"><h2>说明：优化前的基线也调大了堆</h2><ul>
+      <li>Node 默认堆约 2 GB，约 25–30 个常驻上下文时宿主进程溢出崩溃（见第 5 节），测不出并发阶梯。所以"优化前"的并发阶梯是在 <code>--max-old-space-size=10240</code>、50 个常驻用户的条件下测的；其余代码与线上相同。</li>
+      <li>优化前后都是 50 个常驻用户、同一批测试用户、同一提示词。</li>
+    </ul></div>
+  </section>
+
+  <section id="s-before">
+    <h2><span class="n">05</span>优化前结果</h2>
+    <p class="sub">50 个常驻用户，堆上限 10 GB。到 10–12 人同时活跃就碰顶，15 人起 harness 内部排队急剧变长。</p>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>同时活跃</th><th>成功轮次</th><th>首词 p50 / p90（全部）</th><th>稳态首词 p50 / p90</th><th>BE 转发 p50</th><th>harness 准备 p50 / p90</th><th>bash 往返 p50</th><th>整轮 p50</th><th>220 CPU 平均</th><th>220 内存峰值</th></tr>
+      <tr><td>5</td><td>15/15</td><td>10.1 / 15.6 s</td><td>10.1 / 11.7 s</td><td>4.5 s</td><td>2.0 / 7.2 s</td><td>1.6 s</td><td>73 s</td><td>89%</td><td>7.1 GB</td></tr>
+      <tr><td>10</td><td>19/20</td><td>10.9 / 13.4 s</td><td>10.3 / 13.4 s</td><td>6.2 s</td><td>2.9 / 5.1 s</td><td>1.4 s</td><td>96 s</td><td>76%</td><td>6.7 GB</td></tr>
+      <tr><td>10（另一组）</td><td>20/20</td><td>12.8 / 15.7 s</td><td>11.5 / 13.0 s</td><td>4.7 s</td><td>3.1 / 6.2 s</td><td>4.1 s</td><td>110 s</td><td>114%</td><td>7.1 GB</td></tr>
+      <tr><td>15</td><td>29/30</td><td><span class="before">18.3 / 35.3 s</span></td><td>15.9 / 18.7 s</td><td>6.3 s</td><td><span class="before">10.0 / 26.2 s</span></td><td><span class="before">10.1 s</span></td><td>176 s</td><td>123%</td><td>8.9 GB</td></tr>
+      <tr><td>20</td><td><span class="before">23/40</span></td><td><span class="before">19.5 / 39.6 s</span></td><td>17.8 / 27.6 s</td><td>6.0 s</td><td><span class="before">11.5 / 29.7 s</span></td><td><span class="before">13.6 s</span></td><td>183 s</td><td>128%</td><td>9.3 GB</td></tr>
+    </table>
+    <div class="delta">变坏的是 harness 准备和 bash 往返（主线程排队）；模型首字（1.8 → 3 s）和 BE 转发（约 6 s）基本不变。220 CPU 到 115–130% 就封顶 —— 主线程 100% 加少量子进程，另外 6 核空闲。活跃时每轮另占约 120 MB，空闲后释放。</div></div>
+
+    <h3 class="sh">常驻用户与内存</h3>
+    <div class="g2">
+      <div class="card"><h3>默认堆：约 25–30 人崩溃</h3><div class="tag">Node 默认堆上限约 2 GB（2082 MB）</div>
+        <p>每个常驻上下文约占 75–80 MB 堆。约 24 个 ready、几个在启动时，宿主报 <code>FATAL ERROR: Ineffective mark-compacts near heap limit</code> 退出（exit 139），<span class="warn">所有用户同时掉线</span>。日志摘录见附录 <code>heap-crash-excerpt.txt</code>。</p></div>
+      <div class="card"><h3>堆 10 GB：50 人 5.9 GB</h3><div class="tag">含每人的 ws 代理与代码图谱桥子进程</div>
+        <p>50 个常驻上下文共 5.93 GB，每人约 116 MB；220 剩余约 5.5 GB 可用。内存不是最先到的瓶颈，主线程才是。</p></div>
+    </div>
+
+    <h3 class="sh">冷启动</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>场景</th><th>每个上下文就绪耗时</th><th>说明</th></tr>
+      <tr><td>单个</td><td>13–16 s</td><td></td></tr>
+      <tr><td>依次启动 50 个</td><td>13 s → 22 s</td><td class="wrap">常驻越多越慢</td></tr>
+      <tr><td>4 个同时</td><td>145 s</td><td></td></tr>
+      <tr><td>10 个同时</td><td><span class="before">245–251 s</span></td><td class="wrap">全部一起在最后完成：单线程上交错执行</td></tr>
+    </table>
+    <div class="delta">BE 等待用户上下文就绪只等 60 s。10 个同时冷启动时全部超时，客户端<span class="warn">收不到任何错误</span>，消息丢失；并且触发了 BE 死锁（第 10 节）。</div></div>
+
+    <h3 class="sh">数据库（会话入库）</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>同时活跃</th><th>新增事件</th><th>体积</th><th>会话插入</th><th>查序号 / 更新</th><th>平均耗时</th><th>最大</th><th>整库提交/s</th><th>openGauss CPU 峰值</th><th>卡住事务</th></tr>
+      <tr><td>5</td><td>2299</td><td>3.8 MB</td><td>2.4/s</td><td>2.2/s</td><td>0.21–0.45 ms</td><td>42 ms</td><td>49.8</td><td>23%</td><td>0</td></tr>
+      <tr><td>10</td><td>2616</td><td>4.6 MB</td><td>2.5/s</td><td>2.3/s</td><td>0.22–0.49 ms</td><td>42 ms</td><td>54.4</td><td>29%</td><td>0</td></tr>
+      <tr><td>15</td><td>3958</td><td>6.5 MB</td><td>3.2/s</td><td>3.0/s</td><td>0.24–0.48 ms</td><td>42 ms</td><td>71.1</td><td>38%</td><td>0</td></tr>
+      <tr><td>20</td><td>4627</td><td>8.1 MB</td><td>3.3/s</td><td>3.0/s</td><td>0.25–0.55 ms</td><td>42 ms</td><td>81.5</td><td>37%</td><td>0</td></tr>
+    </table>
+    <div class="delta">每轮对话（含子员工）约 140 条事件、240 KB；harness 到会话库最多 7 条连接（max_connections 200）。之前单独压测会话库能到约 2500 次事务/秒，这里用量不到 1%。</div></div>
+  </section>
+
+  <section id="s-cause">
+    <h2><span class="n">06</span>原因分析</h2>
+    <p class="sub">在 10 人并发负载下，对运行中的宿主主线程做 150 s CPU 剖析。主线程几乎没有空闲，时间主要花在拼系统提示词和垃圾回收上。</p>
+    <figure>
+      <div class="fig-h">图 2 <span>主线程时间分布：优化前 → 每项优化后（10 人并发；最后一行为优化后 50 人并发）</span></div>
+      <svg class="rf" viewBox="0 0 760 260" role="img">
+<rect x="150" y="6" width="12" height="12" rx="2" style="fill:#788C5D"/>
+<text class="lab" x="167" y="16">主线程空闲</text>
+<rect x="249" y="6" width="12" height="12" rx="2" style="fill:#B04A3F"/>
+<text class="lab" x="266" y="16">垃圾回收</text>
+<rect x="336" y="6" width="12" height="12" rx="2" style="fill:#D97757"/>
+<text class="lab" x="353" y="16">拼系统提示词</text>
+<rect x="447" y="6" width="12" height="12" rx="2" style="fill:#D1CFC5"/>
+<text class="lab" x="464" y="16">其余工作</text>
+<text class="lab" x="140" y="53" text-anchor="end">优化前</text>
+<rect x="150.0" y="34" width="4.7" height="30" style="fill:#788C5D"/>
+<rect x="154.7" y="34" width="200.6" height="30" style="fill:#B04A3F"/>
+<text x="255.0" y="53" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">34%</text>
+<rect x="355.3" y="34" width="164.0" height="30" style="fill:#D97757"/>
+<text x="437.3" y="53" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">27.8%</text>
+<rect x="519.3" y="34" width="220.7" height="30" style="fill:#D1CFC5"/>
+<text x="629.7" y="53" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">37.4%</text>
+<text class="lab" x="140" y="97" text-anchor="end">① 修 tools.get</text>
+<rect x="150.0" y="78" width="129.8" height="30" style="fill:#788C5D"/>
+<text x="214.9" y="97" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">22%</text>
+<rect x="279.8" y="78" width="96.2" height="30" style="fill:#B04A3F"/>
+<text x="327.9" y="97" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">16.3%</text>
+<rect x="376.0" y="78" width="112.1" height="30" style="fill:#D97757"/>
+<text x="432.0" y="97" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">19%</text>
+<rect x="488.1" y="78" width="251.9" height="30" style="fill:#D1CFC5"/>
+<text x="614.0" y="97" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">42.7%</text>
+<text class="lab" x="140" y="141" text-anchor="end">② + Node 参数</text>
+<rect x="150.0" y="122" width="284.4" height="30" style="fill:#788C5D"/>
+<text x="292.2" y="141" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">48.2%</text>
+<rect x="434.4" y="122" width="27.7" height="30" style="fill:#B04A3F"/>
+<rect x="462.1" y="122" width="116.2" height="30" style="fill:#D97757"/>
+<text x="520.2" y="141" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">19.7%</text>
+<rect x="578.3" y="122" width="161.7" height="30" style="fill:#D1CFC5"/>
+<text x="659.2" y="141" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">27.4%</text>
+<text class="lab" x="140" y="185" text-anchor="end">③ + 委派工具按名查</text>
+<rect x="150.0" y="166" width="420.1" height="30" style="fill:#788C5D"/>
+<text x="360.0" y="185" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">71.2%</text>
+<rect x="570.1" y="166" width="14.8" height="30" style="fill:#B04A3F"/>
+<rect x="584.8" y="166" width="5.3" height="30" style="fill:#D97757"/>
+<rect x="590.1" y="166" width="149.9" height="30" style="fill:#D1CFC5"/>
+<text x="665.1" y="185" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">25.4%</text>
+<text class="lab" x="140" y="229" text-anchor="end">③ 后 · 50 人并发</text>
+<rect x="150.0" y="210" width="133.9" height="30" style="fill:#788C5D"/>
+<text x="217.0" y="229" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">22.7%</text>
+<rect x="283.9" y="210" width="27.1" height="30" style="fill:#B04A3F"/>
+<rect x="311.1" y="210" width="5.3" height="30" style="fill:#D97757"/>
+<rect x="316.4" y="210" width="423.6" height="30" style="fill:#D1CFC5"/>
+<text x="528.2" y="229" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:600">71.8%</text>
+</svg>
+      <figcaption><b>"拼系统提示词"</b>指 agent 每一步的 <code>preStep → systemPrompt.assemble</code>（含其中的 <code>tools.get</code> 和 tool-subagent 段落），按包含时间计；垃圾回收单独计，不重复计入。优化前：主线程空闲 0.8%，垃圾回收 34%，拼提示词 27.8%，cordis 上下文代理 19%（自身时间），AsyncLocalStorage（async_hooks 实现）约 14%。</figcaption>
+    </figure>
+    <div class="g3">
+      <div class="card"><h3>① 查一个工具，重建整张表</h3><div class="tag">DSH core/tools <code>ToolRegistry.get</code></div>
+        <p><code>get(name, scope)</code> 的实现是 <code>this.view(scope).visible.get(name)</code>：每查一个名字，都把作用域链上所有工具复制进新的 Map、逐个检查过滤规则。拼提示词时每个委派工具都会查一次，每一步都在做。占主线程约四分之一，并制造大量垃圾。</p></div>
+      <div class="card"><h3>② 委派工具全进程遍历</h3><div class="tag">DSH tool-subagent <code>delegationTools</code></div>
+        <p><code>delegationTools</code> 是<b>模块级</b>集合，共享宿主上装着所有用户、所有 agent 的委派工具定义。提示词里的委派段落每一步都对集合里每个定义经 cordis 代理调用一次 <code>tools.get</code>，耗时随进程内 agent 总数增长 —— 用户越多越慢。DSH 默认一个进程只服务一个用户，所以原来不明显。</p></div>
+      <div class="card"><h3>③ 运行时参数</h3><div class="tag">Node 22 默认值</div>
+        <p>默认堆约 2 GB，常驻 25 人左右溢出。AsyncLocalStorage 在 Node 22 上基于 async_hooks，每个 Promise 都有开销（约 14%）；新生代空间小，频繁的短命对象导致垃圾回收占比高。</p></div>
+    </div>
+  </section>
+
+  <section id="s-change">
+    <h2><span class="n">07</span>优化内容</h2>
+    <p class="sub">分支 <code>perf/harness-single-thread</code>（基于 origin/D0.6.0，未推送）。两个 DSH 补丁沿用仓库已有的 0.2.1 构建期补丁方式：打镜像时对 DSH 源码做精确文本替换后重新编译，三个 Dockerfile（Dockerfile、Dockerfile.slim、Dockerfile.extensions）都已接入；源码与上游不一致时构建直接失败。</p>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>提交</th><th>改什么</th><th>文件</th><th>结果等价性的验证</th></tr>
+      <tr><td><code>3c8f33509</code></td><td class="wrap"><code>tools.get</code> 只沿作用域链查这一个名字：先查本 agent 自己的注册，再取最近的上级/全局定义并检查过滤规则；<code>run_code</code> 处理与原来相同</td><td class="wrap"><code>scripts/prepare-dsh-tool-lookup-021.mjs</code> + 测试</td><td class="wrap">对照 <code>view()</code> 的移植实现，随机构造 3000 组层栈、6 万多次查询结果全部一致；故意去掉过滤检查，测试能抓出来；DSH core/tools 426 个测试前后全过</td></tr>
+      <tr><td><code>31763231f</code></td><td class="wrap">委派工具旁边维护"名字 → 计数"，提示词段落对每个不同名字只查一次，再判断查到的定义是否属于委派工具；<code>get</code> 里只读一次 <code>this.layers</code></td><td class="wrap"><code>scripts/prepare-dsh-delegation-names-021.mjs</code> + 测试</td><td class="wrap">随机模型对比新旧过滤结果 5000 轮一致；故意去掉归属判断能抓出来；DSH core / subagent 测试前后结果相同</td></tr>
+      <tr><td><code>d4e65d6fc</code></td><td class="wrap">共享宿主模式默认加 <code>--max-old-space-size=8192 --experimental-async-context-frame --max-semi-space-size=64</code>；部署里已显式设置的参数优先</td><td class="wrap"><code>docker-entrypoint.sh</code></td><td class="wrap">合并逻辑 5 种输入情况验证；带这三个参数重跑 DSH core / subagent / session 测试（217 个文件），结果与不带时相同</td></tr>
+    </table>
+    <div class="delta">DSH 自带测试打补丁前后都是 4 个失败，均为环境原因（一个需要真实 Claude Code，一个以 root 运行时权限检查不成立）。<b>部署注意</b>：宿主经 tsx 直接加载 DSH 的 <code>src</code>，补丁必须打在源码上；只改编译产物 <code>lib</code> 不生效（测试中踩过一次）。</div></div>
+  </section>
+
+  <section id="s-after">
+    <h2><span class="n">08</span>优化后结果与对比</h2>
+    <p class="sub">同样 50 个常驻用户、同一批用户和提示词。优化后从 10 人一直压到 50 人，harness 准备时间始终在 2 s 以内。</p>
+    <figure>
+      <div class="fig-h">图 3 <span>稳态首词（第 2 轮起）随并发的变化</span></div>
+      <svg class="rf" viewBox="0 0 760 300" role="img" aria-labelledby="f2">
+<line class="base" x1="56" x2="610" y1="256.0" y2="256.0" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="259.0" text-anchor="end">0</text>
+<line class="base" x1="56" x2="610" y1="216.3" y2="216.3" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="219.3" text-anchor="end">5</text>
+<line class="base" x1="56" x2="610" y1="176.7" y2="176.7" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="179.7" text-anchor="end">10</text>
+<line class="base" x1="56" x2="610" y1="137.0" y2="137.0" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="140.0" text-anchor="end">15</text>
+<line class="base" x1="56" x2="610" y1="97.3" y2="97.3" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="100.3" text-anchor="end">20</text>
+<line class="base" x1="56" x2="610" y1="57.7" y2="57.7" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="60.7" text-anchor="end">25</text>
+<line class="base" x1="56" x2="610" y1="18.0" y2="18.0" style="stroke:#F0EEE6"/>
+<text class="tiny" x="48" y="21.0" text-anchor="end">30</text>
+<text class="tiny" x="56.0" y="272" text-anchor="middle">5</text>
+<text class="tiny" x="117.6" y="272" text-anchor="middle">10</text>
+<text class="tiny" x="179.1" y="272" text-anchor="middle">15</text>
+<text class="tiny" x="240.7" y="272" text-anchor="middle">20</text>
+<text class="tiny" x="363.8" y="272" text-anchor="middle">30</text>
+<text class="tiny" x="486.9" y="272" text-anchor="middle">40</text>
+<text class="tiny" x="610.0" y="272" text-anchor="middle">50</text>
+<line class="base" x1="56" x2="610" y1="256" y2="256"/>
+<text class="lab" x="333" y="294" text-anchor="middle">同时活跃用户数</text>
+<text class="lab" x="14" y="137" text-anchor="middle" transform="rotate(-90 14 137)">首词（秒）</text>
+<path d="M56.0,175.9 L117.6,174.3 L179.1,129.9 L240.7,114.8" style="fill:none;stroke:#B04A3F;stroke-width:2.2"/>
+<circle cx="56.0" cy="175.9" r="3.6" style="fill:#B04A3F;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="56.0" y="191.9" text-anchor="middle" style="fill:#B04A3F">10.1</text>
+<circle cx="117.6" cy="174.3" r="3.6" style="fill:#B04A3F;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="117.6" y="190.3" text-anchor="middle" style="fill:#B04A3F">10.3</text>
+<circle cx="179.1" cy="129.9" r="3.6" style="fill:#B04A3F;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="179.1" y="145.9" text-anchor="middle" style="fill:#B04A3F">15.9</text>
+<circle cx="240.7" cy="114.8" r="3.6" style="fill:#B04A3F;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="240.7" y="130.8" text-anchor="middle" style="fill:#B04A3F">17.8</text>
+<line x1="626" x2="650" y1="24" y2="24" style="stroke:#B04A3F;stroke-width:2.2"/>
+<text class="lab" x="656" y="28">优化前 p50</text>
+<path d="M56.0,163.2 L117.6,149.7 L179.1,107.6 L240.7,37.0" style="fill:none;stroke:#B04A3F;stroke-width:2.2;stroke-dasharray:6 4"/>
+<circle cx="56.0" cy="163.2" r="3.6" style="fill:#fff;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="56.0" y="155.2" text-anchor="middle" style="fill:#B04A3F">11.7</text>
+<circle cx="117.6" cy="149.7" r="3.6" style="fill:#fff;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="117.6" y="141.7" text-anchor="middle" style="fill:#B04A3F">13.4</text>
+<circle cx="179.1" cy="107.6" r="3.6" style="fill:#fff;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="179.1" y="99.6" text-anchor="middle" style="fill:#B04A3F">18.7</text>
+<circle cx="240.7" cy="37.0" r="3.6" style="fill:#fff;stroke:#B04A3F;stroke-width:1.8"/>
+<text class="tiny" x="240.7" y="29.0" text-anchor="middle" style="fill:#B04A3F">27.6</text>
+<line x1="626" x2="650" y1="58" y2="58" style="stroke:#B04A3F;stroke-width:2.2;stroke-dasharray:6 4"/>
+<text class="lab" x="656" y="62">优化前 p90</text>
+<path d="M117.6,229.8 L240.7,218.7 L363.8,210.8 L486.9,196.5 L610.0,187.8" style="fill:none;stroke:#788C5D;stroke-width:2.2"/>
+<circle cx="117.6" cy="229.8" r="3.6" style="fill:#788C5D;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="117.6" y="245.8" text-anchor="middle" style="fill:#788C5D">3.3</text>
+<circle cx="240.7" cy="218.7" r="3.6" style="fill:#788C5D;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="240.7" y="234.7" text-anchor="middle" style="fill:#788C5D">4.7</text>
+<circle cx="363.8" cy="210.8" r="3.6" style="fill:#788C5D;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="363.8" y="226.8" text-anchor="middle" style="fill:#788C5D">5.7</text>
+<circle cx="486.9" cy="196.5" r="3.6" style="fill:#788C5D;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="486.9" y="212.5" text-anchor="middle" style="fill:#788C5D">7.5</text>
+<circle cx="610.0" cy="187.8" r="3.6" style="fill:#788C5D;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="610.0" y="203.8" text-anchor="middle" style="fill:#788C5D">8.6</text>
+<line x1="626" x2="650" y1="92" y2="92" style="stroke:#788C5D;stroke-width:2.2"/>
+<text class="lab" x="656" y="96">优化后 p50</text>
+<path d="M117.6,225.1 L240.7,172.7 L363.8,139.4 L486.9,110.8 L610.0,62.4" style="fill:none;stroke:#788C5D;stroke-width:2.2;stroke-dasharray:6 4"/>
+<circle cx="117.6" cy="225.1" r="3.6" style="fill:#fff;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="117.6" y="217.1" text-anchor="middle" style="fill:#788C5D">3.9</text>
+<circle cx="240.7" cy="172.7" r="3.6" style="fill:#fff;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="240.7" y="164.7" text-anchor="middle" style="fill:#788C5D">10.5</text>
+<circle cx="363.8" cy="139.4" r="3.6" style="fill:#fff;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="363.8" y="131.4" text-anchor="middle" style="fill:#788C5D">14.7</text>
+<circle cx="486.9" cy="110.8" r="3.6" style="fill:#fff;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="486.9" y="102.8" text-anchor="middle" style="fill:#788C5D">18.3</text>
+<circle cx="610.0" cy="62.4" r="3.6" style="fill:#fff;stroke:#788C5D;stroke-width:1.8"/>
+<text class="tiny" x="610.0" y="54.4" text-anchor="middle" style="fill:#788C5D">24.4</text>
+<line x1="626" x2="650" y1="126" y2="126" style="stroke:#788C5D;stroke-width:2.2;stroke-dasharray:6 4"/>
+<text class="lab" x="656" y="130">优化后 p90</text>
+</svg>
+      <figcaption><b>优化前</b>只测到 20 人（20 人时第 2 轮仅 8/20 成功）；<b>优化后</b>测到 50 人。优化后的 p90 尾部主要来自 MiniMax 自身的首字延迟（30–50 人时 p90 10–15 s）。</figcaption>
+    </figure>
+    <div>
+      <figure><div class="fig-h">图 4 <span>轮次成功率</span></div><svg class="rf" viewBox="0 0 760 270" role="img">
+<line x1="56" x2="740" y1="226.0" y2="226.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="229.0" text-anchor="end">0%</text>
+<line x1="56" x2="740" y1="180.5" y2="180.5" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="183.5" text-anchor="end">25%</text>
+<line x1="56" x2="740" y1="135.0" y2="135.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="138.0" text-anchor="end">50%</text>
+<line x1="56" x2="740" y1="89.5" y2="89.5" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="92.5" text-anchor="end">75%</text>
+<line x1="56" x2="740" y1="44.0" y2="44.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="47.0" text-anchor="end">100%</text>
+<rect x="56" y="6" width="12" height="12" rx="2" style="fill:#B04A3F"/>
+<text class="lab" x="73" y="16">优化前</text>
+<rect x="133" y="6" width="12" height="12" rx="2" style="fill:#788C5D"/>
+<text class="lab" x="150" y="16">优化后</text>
+<rect x="76.9" y="44.0" width="26.0" height="182.0" style="fill:#B04A3F"/>
+<text class="tiny" x="89.9" y="40.0" text-anchor="middle" style="fill:#B04A3F">100</text>
+<text class="tiny" x="119.9" y="222" text-anchor="middle">—</text>
+<text class="tiny" x="104.9" y="242" text-anchor="middle">5</text>
+<rect x="174.6" y="53.1" width="26.0" height="172.9" style="fill:#B04A3F"/>
+<text class="tiny" x="187.6" y="49.1" text-anchor="middle" style="fill:#B04A3F">95</text>
+<rect x="204.6" y="53.1" width="26.0" height="172.9" style="fill:#788C5D"/>
+<text class="tiny" x="217.6" y="49.1" text-anchor="middle" style="fill:#788C5D">95</text>
+<text class="tiny" x="202.6" y="242" text-anchor="middle">10</text>
+<rect x="272.3" y="50.0" width="26.0" height="176.0" style="fill:#B04A3F"/>
+<text class="tiny" x="285.3" y="46.0" text-anchor="middle" style="fill:#B04A3F">96.7</text>
+<text class="tiny" x="315.3" y="222" text-anchor="middle">—</text>
+<text class="tiny" x="300.3" y="242" text-anchor="middle">15</text>
+<rect x="370.0" y="121.4" width="26.0" height="104.6" style="fill:#B04A3F"/>
+<text class="tiny" x="383.0" y="117.4" text-anchor="middle" style="fill:#B04A3F">57.5</text>
+<rect x="400.0" y="44.0" width="26.0" height="182.0" style="fill:#788C5D"/>
+<text class="tiny" x="413.0" y="40.0" text-anchor="middle" style="fill:#788C5D">100</text>
+<text class="tiny" x="398.0" y="242" text-anchor="middle">20</text>
+<text class="tiny" x="480.7" y="222" text-anchor="middle">—</text>
+<rect x="497.7" y="50.0" width="26.0" height="176.0" style="fill:#788C5D"/>
+<text class="tiny" x="510.7" y="46.0" text-anchor="middle" style="fill:#788C5D">96.7</text>
+<text class="tiny" x="495.7" y="242" text-anchor="middle">30</text>
+<text class="tiny" x="578.4" y="222" text-anchor="middle">—</text>
+<rect x="595.4" y="50.7" width="26.0" height="175.3" style="fill:#788C5D"/>
+<text class="tiny" x="608.4" y="46.7" text-anchor="middle" style="fill:#788C5D">96.3</text>
+<text class="tiny" x="593.4" y="242" text-anchor="middle">40</text>
+<text class="tiny" x="676.1" y="222" text-anchor="middle">—</text>
+<rect x="693.1" y="49.5" width="26.0" height="176.5" style="fill:#788C5D"/>
+<text class="tiny" x="706.1" y="45.5" text-anchor="middle" style="fill:#788C5D">97</text>
+<text class="tiny" x="691.1" y="242" text-anchor="middle">50</text>
+<line class="base" x1="56" x2="740" y1="226" y2="226"/>
+<text class="lab" x="398" y="264" text-anchor="middle">同时活跃用户数</text>
+<text class="lab" x="14" y="135" text-anchor="middle" transform="rotate(-90 14 135)">轮次成功率</text>
+</svg>
+        <figcaption>超时上限 240 s。优化后的失败轮次：一部分是模型调用了 <code>ask_user_question</code> 在等用户回答（正常行为），其余是委派员工在 240 s 内没有回报。</figcaption></figure>
+      <figure><div class="fig-h">图 5 <span>220 容器 CPU 平均</span></div><svg class="rf" viewBox="0 0 760 270" role="img">
+<line x1="56" x2="740" y1="226.0" y2="226.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="229.0" text-anchor="end">0%</text>
+<line x1="56" x2="740" y1="180.5" y2="180.5" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="183.5" text-anchor="end">35%</text>
+<line x1="56" x2="740" y1="135.0" y2="135.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="138.0" text-anchor="end">70%</text>
+<line x1="56" x2="740" y1="89.5" y2="89.5" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="92.5" text-anchor="end">105%</text>
+<line x1="56" x2="740" y1="44.0" y2="44.0" style="stroke:#F0EEE6;stroke-width:1.5"/>
+<text class="tiny" x="48" y="47.0" text-anchor="end">140%</text>
+<rect x="56" y="6" width="12" height="12" rx="2" style="fill:#B04A3F"/>
+<text class="lab" x="73" y="16">优化前</text>
+<rect x="133" y="6" width="12" height="12" rx="2" style="fill:#788C5D"/>
+<text class="lab" x="150" y="16">优化后</text>
+<rect x="76.9" y="110.3" width="26.0" height="115.7" style="fill:#B04A3F"/>
+<text class="tiny" x="89.9" y="106.3" text-anchor="middle" style="fill:#B04A3F">89</text>
+<text class="tiny" x="119.9" y="222" text-anchor="middle">—</text>
+<text class="tiny" x="104.9" y="242" text-anchor="middle">5</text>
+<rect x="174.6" y="127.2" width="26.0" height="98.8" style="fill:#B04A3F"/>
+<text class="tiny" x="187.6" y="123.2" text-anchor="middle" style="fill:#B04A3F">76</text>
+<rect x="204.6" y="176.6" width="26.0" height="49.4" style="fill:#788C5D"/>
+<text class="tiny" x="217.6" y="172.6" text-anchor="middle" style="fill:#788C5D">38</text>
+<text class="tiny" x="202.6" y="242" text-anchor="middle">10</text>
+<rect x="272.3" y="66.1" width="26.0" height="159.9" style="fill:#B04A3F"/>
+<text class="tiny" x="285.3" y="62.1" text-anchor="middle" style="fill:#B04A3F">123</text>
+<text class="tiny" x="315.3" y="222" text-anchor="middle">—</text>
+<text class="tiny" x="300.3" y="242" text-anchor="middle">15</text>
+<rect x="370.0" y="59.6" width="26.0" height="166.4" style="fill:#B04A3F"/>
+<text class="tiny" x="383.0" y="55.6" text-anchor="middle" style="fill:#B04A3F">128</text>
+<rect x="400.0" y="166.2" width="26.0" height="59.8" style="fill:#788C5D"/>
+<text class="tiny" x="413.0" y="162.2" text-anchor="middle" style="fill:#788C5D">46</text>
+<text class="tiny" x="398.0" y="242" text-anchor="middle">20</text>
+<text class="tiny" x="480.7" y="222" text-anchor="middle">—</text>
+<rect x="497.7" y="164.9" width="26.0" height="61.1" style="fill:#788C5D"/>
+<text class="tiny" x="510.7" y="160.9" text-anchor="middle" style="fill:#788C5D">47</text>
+<text class="tiny" x="495.7" y="242" text-anchor="middle">30</text>
+<text class="tiny" x="578.4" y="222" text-anchor="middle">—</text>
+<rect x="595.4" y="142.8" width="26.0" height="83.2" style="fill:#788C5D"/>
+<text class="tiny" x="608.4" y="138.8" text-anchor="middle" style="fill:#788C5D">64</text>
+<text class="tiny" x="593.4" y="242" text-anchor="middle">40</text>
+<text class="tiny" x="676.1" y="222" text-anchor="middle">—</text>
+<rect x="693.1" y="102.5" width="26.0" height="123.5" style="fill:#788C5D"/>
+<text class="tiny" x="706.1" y="98.5" text-anchor="middle" style="fill:#788C5D">95</text>
+<text class="tiny" x="691.1" y="242" text-anchor="middle">50</text>
+<line class="base" x1="56" x2="740" y1="226" y2="226"/>
+<text class="lab" x="398" y="264" text-anchor="middle">同时活跃用户数</text>
+<text class="lab" x="14" y="135" text-anchor="middle" transform="rotate(-90 14 135)">220 容器 CPU 平均（%）</text>
+</svg>
+        <figcaption>优化前在 120–130% 封顶（主线程满）；优化后 10–40 人只用 38–64%，50 人到 95%。</figcaption></figure>
+    </div>
+    <figure>
+      <div class="fig-h">图 6 <span>稳态首词拆解（中位数）</span></div>
+      <svg class="rf" viewBox="0 0 760 250" role="img">
+<rect x="170" y="6" width="12" height="12" rx="2" style="fill:#87867F"/>
+<text class="lab" x="187" y="16">BE 建会话与转发</text>
+<rect x="317" y="6" width="12" height="12" rx="2" style="fill:#B04A3F"/>
+<text class="lab" x="334" y="16">harness 准备</text>
+<rect x="476" y="6" width="12" height="12" rx="2" style="fill:#D97757"/>
+<text class="lab" x="493" y="16">模型首字（含回传）</text>
+<text class="lab" x="160" y="51" text-anchor="end">优化前 · 10 人</text>
+<rect x="170.0" y="34" width="161.2" height="26" style="fill:#87867F"/>
+<text x="250.6" y="51" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">6.2</text>
+<rect x="331.2" y="34" width="41.6" height="26" style="fill:#B04A3F"/>
+<text x="352.0" y="51" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">1.6</text>
+<rect x="372.8" y="34" width="65.0" height="26" style="fill:#D97757"/>
+<text x="405.3" y="51" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">2.5</text>
+<text class="lab" x="445.8" y="51">首词 10.3 s</text>
+<text class="lab" x="160" y="89" text-anchor="end">优化后 · 10 人</text>
+<rect x="170.0" y="72" width="49.4" height="26" style="fill:#87867F"/>
+<text x="194.7" y="89" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">1.9</text>
+<rect x="219.4" y="72" width="5.2" height="26" style="fill:#B04A3F"/>
+<rect x="224.6" y="72" width="31.2" height="26" style="fill:#D97757"/>
+<text x="240.2" y="89" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">1.2</text>
+<text class="lab" x="263.8" y="89">首词 3.3 s</text>
+<text class="lab" x="160" y="127" text-anchor="end">优化前 · 20 人</text>
+<rect x="170.0" y="110" width="163.8" height="26" style="fill:#87867F"/>
+<text x="251.9" y="127" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">6.3</text>
+<rect x="333.8" y="110" width="195.0" height="26" style="fill:#B04A3F"/>
+<text x="431.3" y="127" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">7.5</text>
+<rect x="528.8" y="110" width="104.0" height="26" style="fill:#D97757"/>
+<text x="580.8" y="127" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">4</text>
+<text class="lab" x="640.8" y="127">首词 17.8 s</text>
+<text class="lab" x="160" y="165" text-anchor="end">优化后 · 20 人</text>
+<rect x="170.0" y="148" width="70.2" height="26" style="fill:#87867F"/>
+<text x="205.1" y="165" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">2.7</text>
+<rect x="240.2" y="148" width="7.8" height="26" style="fill:#B04A3F"/>
+<rect x="248.0" y="148" width="44.2" height="26" style="fill:#D97757"/>
+<text x="270.1" y="165" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">1.7</text>
+<text class="lab" x="300.2" y="165">首词 4.7 s</text>
+<text class="lab" x="160" y="203" text-anchor="end">优化后 · 50 人</text>
+<rect x="170.0" y="186" width="83.2" height="26" style="fill:#87867F"/>
+<text x="211.6" y="203" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">3.2</text>
+<rect x="253.2" y="186" width="41.6" height="26" style="fill:#B04A3F"/>
+<text x="274.0" y="203" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">1.6</text>
+<rect x="294.8" y="186" width="98.8" height="26" style="fill:#D97757"/>
+<text x="344.2" y="203" text-anchor="middle" style="fill:#fff;font-size:10.5px;font-weight:600">3.8</text>
+<text class="lab" x="401.6" y="203">首词 8.6 s</text>
+<text class="tiny" x="170.0" y="232" text-anchor="middle">0s</text>
+<text class="tiny" x="300.0" y="232" text-anchor="middle">5s</text>
+<text class="tiny" x="430.0" y="232" text-anchor="middle">10s</text>
+<text class="tiny" x="560.0" y="232" text-anchor="middle">15s</text>
+<text class="tiny" x="690.0" y="232" text-anchor="middle">20s</text>
+</svg>
+      <figcaption>三段各取中位数，总长取首词中位数，因此只是近似拼接。优化后 harness 准备从 1.6–7.5 s 降到 0.2–1.6 s；BE 建会话与转发仍要 2–3 s，成了首词里最大的一段。</figcaption>
+    </figure>
+
+    <h3 class="sh">优化后并发阶梯明细</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>同时活跃</th><th>成功（全部）</th><th>第 1 轮首词 p50 / p90</th><th>稳态成功</th><th>稳态首词 p50 / p90</th><th>稳态 BE p50</th><th>稳态准备 p50 / p90</th><th>bash 往返 p50</th><th>稳态整轮 p50</th><th>220 CPU 平均</th><th>220 内存峰值</th></tr>
+      <tr><td>10</td><td>19/20</td><td>13.1 / 15.1 s</td><td>9/10</td><td><span class="after">3.3 / 3.9 s</span></td><td>1.9 s</td><td>0.2 / 0.2 s</td><td>0.6 s</td><td>37 s</td><td>38%</td><td>5.7 GB</td></tr>
+      <tr><td>20</td><td>40/40</td><td>43.8 / 59.9 s</td><td>20/20</td><td><span class="after">4.7 / 10.5 s</span></td><td>2.7 s</td><td>0.3 / 0.5 s</td><td>0.8 s</td><td>33 s</td><td>46%</td><td>6.4 GB</td></tr>
+      <tr><td>30</td><td>58/60</td><td>8.2 / 27.4 s</td><td>29/30</td><td><span class="after">5.7 / 14.7 s</span></td><td>2.2 s</td><td>0.5 / 0.9 s</td><td>1.6 s</td><td>26 s</td><td>47%</td><td>6.5 GB</td></tr>
+      <tr><td>40</td><td>77/80</td><td>8.2 / 34.0 s</td><td>39/40</td><td><span class="after">7.5 / 18.3 s</span></td><td>3.1 s</td><td>0.7 / 2.0 s</td><td>1.8 s</td><td>44 s</td><td>64%</td><td>6.7 GB</td></tr>
+      <tr><td>50</td><td>97/100</td><td>9.0 / 54.5 s</td><td>50/50</td><td><span class="after">8.6 / 24.4 s</span></td><td>3.2 s</td><td>1.6 / 2.7 s</td><td>4.1 s</td><td>74 s</td><td>95%</td><td>7.0 GB</td></tr>
+      <tr><td>50（剖析中重跑）</td><td>93/100</td><td>11.5 / 13.4 s</td><td>49/50</td><td>7.8 / 18.6 s</td><td>2.4 s</td><td>0.5 / 1.6 s</td><td>2.6 s</td><td>47 s</td><td>93%</td><td>7.1 GB</td></tr>
+    </table>
+    <div class="delta"><b>第 1 轮更慢</b>是测试方式造成的：脚本让 N 个用户同一时刻登录后立刻发消息（BE 被登录风暴压忙，20 人时 BE 转发 p50 22 s），同时 N 个工具沙箱在 118 上一起冷启动（harness 准备 p50 21 s）。真实使用中登录是分散的。</div></div>
+
+    <h3 class="sh">支撑机与数据库（优化后）</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>同时活跃</th><th>B 数量 / 内存</th><th>118 剩余内存</th><th>BE CPU 峰值</th><th>openGauss CPU 峰值</th><th>Redis ops 峰值</th><th>会话插入</th><th>平均 / 最大</th><th>整库提交/s</th><th>卡住事务</th></tr>
+      <tr><td>10</td><td>10 / 0.8 GB</td><td>6.5 GB</td><td>116%</td><td>46%</td><td>1342</td><td>3.0/s</td><td>0.68 / 42 ms</td><td>68.5</td><td>0</td></tr>
+      <tr><td>20</td><td>30 / 2.3 GB</td><td>4.4 GB</td><td>189%</td><td>75%</td><td>2217</td><td>5.2/s</td><td>0.91 / 52 ms</td><td>100.7</td><td>0</td></tr>
+      <tr><td>30</td><td>30 / 2.3 GB</td><td>4.3 GB</td><td>250%</td><td>78%</td><td>3343</td><td>6.2/s</td><td>0.94 / 52 ms</td><td>98.2</td><td>0</td></tr>
+      <tr><td>40</td><td>40 / 3.1 GB</td><td>3.2 GB</td><td>148%</td><td>74%</td><td>3853</td><td>7.8/s</td><td>0.67 / 52 ms</td><td>129.1</td><td>0</td></tr>
+      <tr><td>50</td><td>50 / 3.8 GB</td><td><span class="before">1.8 GB</span></td><td>218%</td><td>123%</td><td>3616</td><td>12.9/s</td><td>1.86 / 112 ms</td><td>219.8</td><td>0</td></tr>
+    </table>
+    <div class="delta">50 人时每秒约 37 条会话语句（插入 + 查序号 + 更新），平均仍在 2 ms 以内，openGauss 不是瓶颈。50 人以上先卡在 118 的内存，其次是 BE 的 CPU。</div></div>
+
+    <h3 class="sh">还剩多少余量 · 下一批热点</h3>
+    <div class="card"><p>50 人并发时主线程仍有 22.7% 空闲，估计单进程能到 60 人左右（<span class="warn">未实测</span>）。剖析里新的热点：</p>
+      <table class="data" style="margin-top:10px">
+        <tr><th>占比</th><th>内容</th><th>归属</th></tr>
+        <tr><td>约 10%</td><td class="wrap">技能视图重复计算（<code>skill-runtime.viewOf</code>、<code>group-state-boundary</code>）</td><td>ByClaw 自己的插件</td></tr>
+        <tr><td>8.4%</td><td class="wrap">每建一条到 B 的流就起一个 <code>ssh -O forward/cancel</code> 子进程</td><td>DSH dsh-ssh</td></tr>
+        <tr><td>约 4%</td><td class="wrap">每轮经 ssh 对 agent 指令文件做 stat</td><td>DSH fs-ssh</td></tr>
+        <tr><td>约 4%</td><td class="wrap">会话状态投影</td><td>DSH session-projection</td></tr>
+      </table></div>
+  </section>
+
+  <section id="s-func">
+    <h2><span class="n">09</span>功能回归：代码与文件</h2>
+    <p class="sub">同样 7 个用例分别在优化前、优化后的宿主上跑一遍（切换方式：同一台 220 换用原启动脚本、去掉补丁和两个新参数）。判断依据：最终答案是否正确；openGauss 会话日志里实际调用了哪些工具、有无报错；生成的文件是否落盘。</p>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>用例</th><th>检查内容</th><th>优化后</th><th>优化前</th><th>实际调用的工具</th></tr>
+      <tr><td>Python 写 / 改 / 运行</td><td class="wrap">fib.py 第 30 项 832040，改成第 35 项 9227465</td><td><span class="pill ok">通过</span></td><td><span class="pill ok">通过</span></td><td>write · edit · bash · read</td></tr>
+      <tr><td>Node 脚本</td><td class="wrap">sum.js 输出 5050；B 上 <code>NODE_OPTIONS</code> 为空</td><td><span class="pill ok">通过</span></td><td><span class="pill ok">通过</span></td><td>write · bash</td></tr>
+      <tr><td>多文件找调用方</td><td class="wrap">答案 b.py、c.py（不含 d.py）</td><td><span class="pill mid">答案对，grep/glob 报错</span></td><td><span class="pill mid">同样报错</span></td><td>grep · glob · bash · read</td></tr>
+      <tr><td>代码图谱</td><td class="wrap">codegraph_explore 分析 mul 调用 add</td><td><span class="pill ok">通过</span></td><td><span class="pill mid">工具和答案都对，整轮超 270 s</span></td><td>mcp__codegraph__codegraph_explore</td></tr>
+      <tr><td>上传 CSV 计算</td><td class="wrap">附件 amount 列总和 1326</td><td><span class="pill ok">通过</span></td><td><span class="pill ok">通过</span></td><td>read · bash</td></tr>
+      <tr><td>生成并交付文件</td><td class="wrap">report.md 落盘到用户会话目录，调用 present</td><td><span class="pill ok">通过</span></td><td><span class="pill ok">通过</span></td><td>write · present</td></tr>
+      <tr><td>读大文件指定行</td><td class="wrap">5000 行文件第 4321–4323 行</td><td><span class="pill ok">通过</span></td><td><span class="pill ok">通过</span></td><td>bash · read</td></tr>
+    </table>
+    <div class="delta"><b>结论：没有发现优化带来的功能变化。</b>过程中出现的其他工具报错（编辑时原文没匹配上、专家团成员名写错等）是模型用错了工具、随后自行纠正，优化前后都有。grep/glob 的问题在优化前后完全相同，见第 12 节。</div></div>
+  </section>
+
+  <section id="s-db">
+    <h2><span class="n">10</span>会话库（openGauss）压测</h2>
+    <p class="sub">单独回答三个问题：会话写入能撑多少活跃用户；一个用户有大量会话时写入和读取会不会变慢；BE 和会话共用一个库时谁先到上限。</p>
+    <h3 class="sh">方法</h3>
+    <div class="card"><table class="data kv">
+      <tr><td>被测对象</td><td class="wrap">118 上的 openGauss 6.0.3（8 vCPU / 14.8 GB 共享机、单块云盘，shared_buffers 1 GB，max_connections 200）。写入单独的 <code>sdb_load</code> schema，不碰业务表；测完已删表。</td></tr>
+      <tr><td>数据</td><td class="wrap">今天压测中真实产生的会话（含委派子会话），从库里导出：2272 个会话、91,497 条事件，平均每条 2.9 KB。随机抽 30%（724 个会话、29,639 条，平均 3.0 KB，p99 72 KB），分布与全量一致。</td></tr>
+      <tr><td>发压</td><td class="wrap">沿用 11-02 会话库压测工具：经真实插件代码（<code>ctx.sessionPersistence</code>）按事件原始节奏回放，超过 30 s 的间隔截断。默认 4 个进程模拟 4 台宿主、每个连接池 8 条；每档 100 s，前 30 s 不计入。耗时指一次写入事务从发起到提交，含等连接池。</td></tr>
+      <tr><td>换算成用户</td><td class="wrap">今天真实压测里，每个活跃用户每秒约 0.18–0.24 次会话写入事务（每轮约 3 个会话、120 条事件）；下文按 0.24 换算。</td></tr>
+    </table></div>
+
+    <h3 class="sh">① 写入容量</h3>
+    <figure>
+      <div class="fig-h">图 9 <span>写入耗时随同时写入的会话数变化</span></div>
+      <svg class="rf" viewBox="0 0 760 320" role="img" aria-labelledby="f9">
+<line class="base" x1="60" x2="630" y1="274.0" y2="274.0" style="stroke:#F0EEE6"/>
+<text class="tiny" x="52" y="277.0" text-anchor="end">1 ms</text>
+<line class="base" x1="60" x2="630" y1="201.0" y2="201.0" style="stroke:#F0EEE6"/>
+<text class="tiny" x="52" y="204.0" text-anchor="end">10 ms</text>
+<line class="base" x1="60" x2="630" y1="127.9" y2="127.9" style="stroke:#F0EEE6"/>
+<text class="tiny" x="52" y="130.9" text-anchor="end">100 ms</text>
+<line class="base" x1="60" x2="630" y1="54.9" y2="54.9" style="stroke:#F0EEE6"/>
+<text class="tiny" x="52" y="57.9" text-anchor="end">1 s</text>
+<text class="tiny" x="60.0" y="290" text-anchor="middle">500</text>
+<text class="tiny" x="155.0" y="290" text-anchor="middle">1000</text>
+<text class="tiny" x="250.0" y="290" text-anchor="middle">2000</text>
+<text class="tiny" x="345.0" y="290" text-anchor="middle">3000</text>
+<text class="tiny" x="440.0" y="290" text-anchor="middle">4000</text>
+<text class="tiny" x="535.0" y="290" text-anchor="middle">5000</text>
+<text class="tiny" x="630.0" y="290" text-anchor="middle">6000</text>
+<line class="base" x1="60" x2="630" y1="274" y2="274"/>
+<text class="tiny" x="345.0" y="314" text-anchor="middle">同时写入的会话数</text>
+<text class="tiny" x="14" y="147.0" text-anchor="middle" transform="rotate(-90 14 147.0)">每次写入耗时（对数）</text>
+<polyline points="60.0,182.3 155.0,182.3 250.0,161.2 345.0,145.7 440.0,132.0 535.0,61.7 630.0,33.5" style="fill:none;stroke:#B04A3F;stroke-width:2.2"/>
+<circle cx="60.0" cy="182.3" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="60.0" y="173.3" text-anchor="middle" style="fill:#B04A3F">18</text>
+<circle cx="155.0" cy="182.3" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="155.0" y="173.3" text-anchor="middle" style="fill:#B04A3F">18</text>
+<circle cx="250.0" cy="161.2" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="250.0" y="152.2" text-anchor="middle" style="fill:#B04A3F">35</text>
+<circle cx="345.0" cy="145.7" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="345.0" y="136.7" text-anchor="middle" style="fill:#B04A3F">57</text>
+<circle cx="440.0" cy="132.0" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="440.0" y="123.0" text-anchor="middle" style="fill:#B04A3F">88</text>
+<circle cx="535.0" cy="61.7" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="535.0" y="52.7" text-anchor="middle" style="fill:#B04A3F">806</text>
+<circle cx="630.0" cy="33.5" r="3.4" style="fill:#B04A3F"/>
+<text class="tiny" x="630.0" y="24.5" text-anchor="middle" style="fill:#B04A3F">2.0 s</text>
+<line x1="648" x2="670" y1="34" y2="34" style="stroke:#B04A3F;stroke-width:2.2"/>
+<text class="lab" x="676" y="38">写入 p99</text>
+<polyline points="60.0,206.9 155.0,205.7 250.0,184.1 345.0,168.3 440.0,156.2 535.0,75.9 630.0,40.5" style="fill:none;stroke:#D97757;stroke-width:2.2" stroke-dasharray="5 4"/>
+<circle cx="60.0" cy="206.9" r="3.4" style="fill:#D97757"/>
+<circle cx="155.0" cy="205.7" r="3.4" style="fill:#D97757"/>
+<circle cx="250.0" cy="184.1" r="3.4" style="fill:#D97757"/>
+<circle cx="345.0" cy="168.3" r="3.4" style="fill:#D97757"/>
+<circle cx="440.0" cy="156.2" r="3.4" style="fill:#D97757"/>
+<circle cx="535.0" cy="75.9" r="3.4" style="fill:#D97757"/>
+<circle cx="630.0" cy="40.5" r="3.4" style="fill:#D97757"/>
+<line x1="648" x2="670" y1="56" y2="56" style="stroke:#D97757;stroke-width:2.2" stroke-dasharray="5 4"/>
+<text class="lab" x="676" y="60">写入 p95</text>
+<polyline points="60.0,240.2 155.0,240.2 250.0,241.3 345.0,229.2 440.0,238.1 535.0,164.1 630.0,78.6" style="fill:none;stroke:#788C5D;stroke-width:2.2"/>
+<circle cx="60.0" cy="240.2" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="60.0" y="255.2" text-anchor="middle" style="fill:#788C5D">2.9</text>
+<circle cx="155.0" cy="240.2" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="155.0" y="255.2" text-anchor="middle" style="fill:#788C5D">2.9</text>
+<circle cx="250.0" cy="241.3" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="250.0" y="256.3" text-anchor="middle" style="fill:#788C5D">2.8</text>
+<circle cx="345.0" cy="229.2" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="345.0" y="244.2" text-anchor="middle" style="fill:#788C5D">4.1</text>
+<circle cx="440.0" cy="238.1" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="440.0" y="253.1" text-anchor="middle" style="fill:#788C5D">3.1</text>
+<circle cx="535.0" cy="164.1" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="535.0" y="179.1" text-anchor="middle" style="fill:#788C5D">32</text>
+<circle cx="630.0" cy="78.6" r="3.4" style="fill:#788C5D"/>
+<text class="tiny" x="630.0" y="93.6" text-anchor="middle" style="fill:#788C5D">473</text>
+<line x1="648" x2="670" y1="78" y2="78" style="stroke:#788C5D;stroke-width:2.2"/>
+<text class="lab" x="676" y="82">写入 p50</text>
+</svg>
+      <figcaption>纵轴为对数刻度，横轴各档等距。4000 个会话以内中位数基本不变、p99 不到 100 ms；5000 开始排队，拐点在 4000 到 5000 之间。全程 0 错误。</figcaption>
+    </figure>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>同时写入的会话</th><th>事务/秒</th><th>约合活跃用户</th><th>p50</th><th>p95</th><th>p99</th><th>最大</th><th>错误</th></tr>
+      <tr><td>500</td><td>171</td><td>~700</td><td>2.9 ms</td><td>8.3 ms</td><td>18 ms</td><td>47 ms</td><td>0</td></tr>
+      <tr><td>1000</td><td>337</td><td>~1400</td><td>2.9 ms</td><td>8.6 ms</td><td>18 ms</td><td>49 ms</td><td>0</td></tr>
+      <tr><td>2000</td><td>699</td><td>~2900</td><td>2.8 ms</td><td>17 ms</td><td>35 ms</td><td>98 ms</td><td>0</td></tr>
+      <tr><td>3000</td><td>1051</td><td>~4400</td><td>4.1 ms</td><td>28 ms</td><td>57 ms</td><td>173 ms</td><td>0</td></tr>
+      <tr><td>4000</td><td>1394</td><td>~5800</td><td>3.1 ms</td><td>41 ms</td><td><span class="after">88 ms</span></td><td>168 ms</td><td>0</td></tr>
+      <tr><td>5000</td><td>1731</td><td>~7200</td><td>32 ms</td><td>515 ms</td><td><span class="before">806 ms</span></td><td>1.0 s</td><td>0</td></tr>
+      <tr><td>6000</td><td>1792（饱和）</td><td>—</td><td>473 ms</td><td>1.6 s</td><td><span class="before">2.0 s</span></td><td>2.2 s</td><td>0</td></tr>
+    </table>
+    <div class="delta"><b>结论</b>：这台 8 核测试机上会话写入约能撑 6000–7000 个活跃用户，与 11-02 的结论一致。饱和时整机 CPU 用满（openGauss 约 4 核，发压约 2 核）。</div></div>
+
+    <div class="delta" style="margin-top:14px"><b>SQL 统计参数的开销。</b>为了看每条语句的耗时，把 <code>instr_unique_sql_count</code> 从默认 100 调到了 5000。这时 3000 个会话的 p99 是 474 ms，4000 档在约 1200 事务/秒时饱和；改回 100 后分别是 57 ms 和 1394 事务/秒。原因是插件批量插入时每批 VALUES 行数不同，每种行数都被记成一条新的"唯一 SQL"。生产上要保持默认值，或把插件改成固定形状的批量写入。上表是改回 100 之后的数据，测完参数已保持 100。</div>
+
+    <h3 class="sh">② 一个用户大量会话</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>场景</th><th>事务/秒</th><th>结果</th></tr>
+      <tr><td>1 个用户同时写 1000 个会话（1 台宿主、连接池 8）</td><td>346</td><td>p99 57 ms</td></tr>
+      <tr><td>1 个用户同时写 2000 个会话（1 台宿主、连接池 8）</td><td>702</td><td><span class="before">p99 170 ms</span></td></tr>
+      <tr><td>同上，连接池 32</td><td>692</td><td><span class="after">p99 37 ms</span></td></tr>
+      <tr><td>对照：2000 个会话分给 4 台宿主（4 × 8）</td><td>699</td><td>p99 35 ms</td></tr>
+      <tr><td>1 个用户不加间隔连续写</td><td>1567</td><td class="wrap">0 错误；累积到 21,031 个会话、84.7 万条事件</td></tr>
+      <tr><td>列出该用户全部 21,031 个会话</td><td>—</td><td>70–119 ms（5 次）</td></tr>
+      <tr><td>随机恢复一个会话（平均 32 条事件），并发 1 / 10 / 50 / 200</td><td>—</td><td class="wrap">p50 17 / 27 / 120 / 695 ms；50、200 并发时卡在连接池 8</td></tr>
+      <tr><td>恢复最长的会话（平均 272 条，最多 738 条），并发 1 / 10</td><td>—</td><td class="wrap">p50 52 / 43 ms，p99 641 / 890 ms</td></tr>
+    </table>
+    <div class="delta"><b>结论</b>：同一用户的会话在库里互不排队，因为行锁是按会话加的。唯一的限制是所在宿主的连接池。一个用户累积到 2 万个会话后，列表和恢复仍在百毫秒级。</div></div>
+
+    <h3 class="sh">③ BE 与会话混合负载</h3>
+    <p class="sub">220 上跑真实 50 人聊天（BE + 真实会话写入，与第 8 节 c50 相同的用户和设置）；同时在 220 另起发压，持续写入 2000 个会话（约 700 事务/秒，约合 2900 个用户的会话写入量），经 VPC 连 118 的库，与宿主连库方式一致。</p>
+    <div class="card tblwrap"><table class="data">
+      <tr><th></th><th>各自单独跑</th><th>一起跑</th></tr>
+      <tr><td>会话发压（2000 个会话）</td><td>699 事务/秒，p99 35 ms</td><td>701 事务/秒，p99 42 ms，0 错误</td></tr>
+      <tr><td>聊天稳态首词 p50 / p90</td><td>8.6 / 24.4 s</td><td>9.5 / 22.1 s</td></tr>
+      <tr><td>BE 转发 p50</td><td>3.2 s</td><td>3.4 s</td></tr>
+      <tr><td>真实会话语句平均耗时</td><td>0.2–0.6 ms</td><td>0.2–0.5 ms</td></tr>
+      <tr><td>整库每秒提交</td><td>220</td><td>704</td></tr>
+      <tr><td>bash 往返 p50</td><td>4.1 s</td><td class="wrap"><span class="before">7.1 s</span>（发压进程占了 220 的 2.5 核，与数据库无关）</td></tr>
+    </table>
+    <div class="delta"><b>结论</b>：数据库扛住约 2900 个用户量的会话写入时，50 人真实聊天基本不受影响。<br><b>谁先压满库（推算）</b>：按 openGauss CPU 估算，每个活跃用户在 BE 侧约 0.7% CPU、约 4 次提交/秒，会话写入约 0.05% CPU，前者约是后者的 14 倍。同一台 8 核库上，先到上限的会是 BE，粗估几百到一千个活跃用户；会话写入要到约 6000 个用户才饱和。BE 的负载这次没法放大到 50 人以上实测。</div></div>
+  </section>
+
+  <section id="s-ws">
+    <h2><span class="n">11</span>WebSocket 长连接测试</h2>
+    <p class="sub">分离后 harness 要连很多工具沙箱，后面还要接入客户端，连接数会是现在的约 3 倍。问题：一个 harness 能持有多少条长连接，先撞到的是什么。</p>
+    <h3 class="sh">现在的连接形态</h3>
+    <div class="card"><table class="data kv">
+      <tr><td>到工具沙箱 B</td><td class="wrap">每个 B 一条：harness 里一个 <code>ssh -M</code> 主连接进程 + 它的 ProxyCommand（一个独立的 Node 进程 <code>ws-proxy.mjs</code>，持有一条 WebSocket），经入口（生产为 ALB）到 B 上的 ws-bridge 和 sshd。每次文件或流操作再起一个 <code>ssh -S … -O forward/cancel</code>。用户空闲 10 分钟释放 B，连接随之断开。</td></tr>
+      <tr><td>其他长连接</td><td class="wrap">50 个已登录用户空闲时，harness 只有 301 条 Redis 长连接（约 6 条/人）。</td></tr>
+      <tr><td>测试方法</td><td class="wrap">220 上停掉 harness，在 harness 镜像的容器里用与生产相同的 ssh 参数和 ws-proxy，经 bench-ingress 连 118 上的一个 B 替身（真实 sshd + ws-bridge，不限资源，每条连接上跑一个回显程序代替 DSH helper）。每条连接每 10 s 在主连接上做一次心跳往返、每 30 s 用 <code>ssh -S</code> 执行一次命令。内存按容器 cgroup 计（按进程 RSS 相加会重复计算共享内存，约 63 MB/条）。</td></tr>
+    </table></div>
+
+    <h3 class="sh">① 现在的形态：每条连接两个进程</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>连接数</th><th>建连 p50</th><th>心跳往返 p99</th><th>命令 p99</th><th>实际内存/条</th><th>总内存</th><th>进程数</th><th>CPU</th></tr>
+      <tr><td>50</td><td>249 ms</td><td>3.3 ms</td><td>18 ms</td><td>13.9 MB</td><td>0.7 GB</td><td>101</td><td>0.04 核</td></tr>
+      <tr><td>100</td><td>251 ms</td><td>3.4 ms</td><td>21 ms</td><td>13.9 MB</td><td>1.4 GB</td><td>201</td><td>0.06 核</td></tr>
+      <tr><td>150</td><td>237 ms</td><td>3.3 ms</td><td>22 ms</td><td>13.9 MB</td><td>2.1 GB</td><td>301</td><td>0.08 核</td></tr>
+      <tr><td>300</td><td>377 ms</td><td>3.8 ms</td><td>25 ms</td><td>14.0 MB</td><td>4.2 GB</td><td>602</td><td>0.19 核</td></tr>
+      <tr><td>500</td><td>379 ms</td><td>7.3 ms</td><td>23 ms</td><td>14.0 MB</td><td><span class="before">7.0 GB</span></td><td>1001</td><td>0.32 核</td></tr>
+      <tr><td>300 · 繁忙（心跳 1 s、命令 5 s）</td><td>—</td><td>36 ms</td><td>59 ms</td><td>15.4 MB</td><td>—</td><td>—</td><td>1.26 核</td></tr>
+    </table>
+    <div class="delta"><b>结论</b>：全部建成，零丢失、零失败。这种形态下连接数的上限是<b>内存</b>，每条约 14 MB 线性增长，CPU 和延迟不是问题。按 50 个活跃用户 × 3 条 = 150 条算约 2.1 GB，加上 harness 本身 50 人时的约 7 GB，一台 15 GB 的机器放得下。</div></div>
+
+    <h3 class="sh">② 替代方案：所有连接放在同一个 Node 进程里</h3>
+    <p class="sub">同样的镜像、Node 22 和启动参数，一个进程持有 N 条 WebSocket 连到 118 上的回显服务（4 个端口，绕开单目标约 1 万的本地端口上限）。</p>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>连接数</th><th>每条每秒消息</th><th>往返 p99</th><th>CPU</th><th>进程内存</th><th>每条</th></tr>
+      <tr><td>1,000</td><td>0.1</td><td>0.8 ms</td><td>0.03 核</td><td>106 MB</td><td>61 KB</td></tr>
+      <tr><td>10,000</td><td>0.1</td><td>0.9 ms</td><td>0.10 核</td><td>411 MB</td><td>37 KB</td></tr>
+      <tr><td>20,000</td><td>0.1</td><td>1.5 ms</td><td>0.15 核</td><td>734 MB</td><td>35 KB</td></tr>
+      <tr><td>33,545（尝试 35,000）</td><td>0.1</td><td>1.2 ms</td><td>0.14 核</td><td>1.29 GB</td><td>38 KB</td></tr>
+      <tr><td>10,000 · 繁忙</td><td>1（256 B）</td><td>2.5 ms</td><td>0.30 核</td><td>545 MB</td><td>51 KB</td></tr>
+      <tr><td>10,000 · 繁忙</td><td>1（4 KB）</td><td>3.4 ms</td><td>0.51 核</td><td>556 MB</td><td>52 KB</td></tr>
+    </table>
+    <div class="delta"><b>结论</b>：每条约 40 KB，约为现在形态的 1/350；单进程到 3 万多条仍稳定。35,000 档有 1,455 个握手失败，原因在两台机器之间的网络和内核限制（监听队列，118 的 <code>somaxconn</code> 为 4096），不在 Node。</div></div>
+
+    <h3 class="sh">③ 系统层面的限制</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>项目</th><th>220</th><th>229（只读查看）</th><th>影响</th></tr>
+      <tr><td>本地端口范围</td><td>10000–19999</td><td>—</td><td class="wrap">连同一个入口地址最多约 1 万条；要更多就调大范围或用多个入口地址</td></tr>
+      <tr><td>连接跟踪表</td><td>262,144</td><td>262,144</td><td>够用</td></tr>
+      <tr><td>宿主容器 <code>--init</code></td><td>未开</td><td>未开</td><td class="wrap"><span class="before">会积累僵尸进程</span>，见下</td></tr>
+      <tr><td>测试入口 nginx</td><td>2 worker × 8192</td><td>生产为 ALB</td><td class="wrap">每条代理连接占 2 个，约 8000 条封顶；生产需确认 ALB 上限</td></tr>
+    </table></div>
+
+    <h3 class="sh">④ 僵尸进程：问题与修复</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>情况</th><th>结果</th></tr>
+      <tr><td>修复前，关闭 50 / 100 / 150 / 500 条连接后</td><td class="wrap"><span class="before">40 / 100 / 150 / 479 个僵尸</span>（220 的 harness 运行中已积了 98 个）</td></tr>
+      <tr><td>修复前，容器里制造 5 个孤儿进程</td><td><span class="before">5 个僵尸</span></td></tr>
+      <tr><td>修复后（byclaw-pid1），制造 10 个孤儿进程</td><td><span class="after">0 个僵尸</span></td></tr>
+      <tr><td>修复后，真实工具调用建立到 B 的连接再断开</td><td><span class="after">ssh 和 ws-proxy 都退出，0 个僵尸</span></td></tr>
+      <tr><td>修复后，docker restart</td><td class="wrap">SIGTERM 转给 harness，正常释放后退出，退出码 0</td></tr>
+    </table>
+    <div class="delta"><b>原因</b>：multi-host 模式让 Node 直接当容器的 1 号进程，Node 不回收被过继来的子进程；ssh 退出后它的 ws-proxy 被过继给 1 号进程，就成了僵尸。<b>修复</b>（提交 <code>9e6e5f926</code>，已推送到 PR #327）：入口脚本改为经 <code>byclaw-pid1</code> 启动 harness——一个注册为 child subreaper 的小 Python 程序，转发信号、回收所有孤儿、带回 harness 的退出码；镜像已有 Python，不加依赖；不论部署方是否加 <code>--init</code> 都有效。</div></div>
+  </section>
+
+  <section id="s-issue">
+    <h2><span class="n">12</span>发现的问题</h2>
+    <p class="sub">都会挡住更大规模的使用，与本次优化无关（第 3 条已由优化处理）。</p>
+    <ol class="trace">
+      <li class="human"><div class="tr-head"><b>BE 死锁：卡死聊天线程，最终所有人收不到回复</b><span class="tr-stage">BE</span><span class="tr-flag">严重</span></div>
+        <div class="tr-body"><p><b>现象</b>：用户上下文冷启动超过 60 s 后，BE 的 8 个聊天线程有 7 个卡在 <code>SessionService.save</code> 等数据库；openGauss 里 7 对一一对应的 "idle in transaction" 持锁连接和阻塞的 <code>INSERT INTO byai_session</code>。之后所有用户（包括已就绪的）都收不到回复，客户端也看不到错误。</p>
+        <p><b>原因</b>：聊天异常处理 <code>ScriptService.saveExceptionRequiresNew</code> 用新事务再写一次会话，而外层事务已插入同一行且未提交，两个连接互相等待，数据库检测不到。</p>
+        <p><b>处置</b>：测试中杀掉持锁连接恢复；之后改为压测前逐个预热，避免触发。<b>建议</b>：异常路径不要在新事务里重写外层未提交的会话行。</p></div></li>
+      <li class="human"><div class="tr-head"><b>平台全局最多 30 个运行中沙箱</b><span class="tr-stage">平台配置</span><span class="tr-flag">高</span></div>
+        <div class="tr-body"><p>系统参数 <code>ENABLE_USE_SANDBOX_NUM=30</code>（从 229 复制）。超过后工具沙箱启动报 "Business access is busy"，插件每 3 s 重试，最多 19 次。每人一个 B 的话，这个值直接限制总人数。测试中改为 200；<b>建议</b>确认 229/线上的取值。</p></div></li>
+      <li><div class="tr-head"><b>Node 默认堆约 2 GB：约 25 个常驻用户时宿主崩溃</b><span class="tr-stage">harness</span><span class="tr-flag auto">已在分支处理</span></div>
+        <div class="tr-body"><p>提交 <code>d4e65d6fc</code> 默认 8 GB。<b>部署注意</b>：堆上限要与宿主容器内存匹配，容器内存更小时会先被容器杀掉。</p></div></li>
+      <li><div class="tr-head"><b>分离模式下 grep / glob 每次失败</b><span class="tr-stage">harness / B 镜像</span><span class="tr-flag">中</span></div>
+        <div class="tr-body"><p>报 <code>ripgrep provider failure</code>。DSH 解析的是 A 本地打包的 rg 路径 <code>/workspace/node_modules/.pnpm/@vscode+ripgrep-linux-x64@1.18.0/…/bin/rg</code>，却在 B 上执行，B 上没有这个文件（B 自带 <code>/usr/bin/rg</code>）。模型会退回用 bash 搜索，结果通常仍对，但多绕几步。<b>建议</b>：B 镜像在同一路径放 rg，或 tool-env 插件把 rg 指到 B 的 <code>/usr/bin/rg</code>。</p></div></li>
+      <li><div class="tr-head"><b>冷启动互相拖慢，超过 60 s 时消息静默丢失</b><span class="tr-stage">harness + BE</span><span class="tr-flag">中</span></div>
+        <div class="tr-body"><p>10 个同时冷启动每个 245–251 s；BE 等待就绪只等 60 s，而对宿主的 PUT 超时是 100 s；超时后客户端收不到错误。BE 的就绪检查走一个实际只有 4 个线程的启动线程池，所有 DSH 消息都要经过它。</p></div></li>
+      <li><div class="tr-head"><b>openGauss 唯一 SQL 统计放大写入延迟</b><span class="tr-stage">数据库配置 / 插件</span><span class="tr-flag">中</span></div>
+        <div class="tr-body"><p><code>instr_unique_sql_count</code> 调大到 5000 时，会话写入在 3000 个会话时的 p99 从 57 ms 变为 474 ms，饱和吞吐从约 1800 降到约 1200 事务/秒。原因是插件批量插入的 VALUES 行数不固定，每种行数都算一条唯一 SQL。<b>建议</b>：生产保持默认 100；或把插件的批量写入改成固定形状（例如数组参数一次插入）。</p></div></li>
+      <li><div class="tr-head"><b>openGauss 容器没有内存上限，内存不足时被内核杀掉</b><span class="tr-stage">部署</span><span class="tr-flag">中</span></div>
+        <div class="tr-body"><p>第一次混合压测时，118 上同时有 50 个工具沙箱、BE、数据库和发压容器，整机内存耗尽，内核杀掉 <code>gaussdb</code>，约 13 s 后自动重启。期间 50 人聊天变慢但全部完成，220 上的宿主没有崩溃（会话库插件对断连的处理有效）。这是测试布置导致的；<b>建议</b>生产给数据库预留内存或设上限，不与沙箱混部。</p></div></li>
+      <li><div class="tr-head"><b>每断开一条到工具沙箱的连接留下一个僵尸进程</b><span class="tr-stage">harness 镜像</span><span class="tr-flag auto">已在分支修复</span></div>
+        <div class="tr-body"><p>Node 当 1 号进程不回收被过继的 ws-proxy；B 空闲释放后连接断开，僵尸持续增加，最终耗尽进程号。229 的宿主容器同样没开 <code>--init</code>。提交 <code>9e6e5f926</code> 用 <code>byclaw-pid1</code> 修复，见第 11 节。</p></div></li>
+      <li><div class="tr-head"><b>每条工具沙箱连接要两个进程、约 14 MB</b><span class="tr-stage">harness / tool-env</span><span class="tr-flag">中</span></div>
+        <div class="tr-body"><p>ssh 主连接 + 独立的 ws-proxy Node 进程。50 人规模没问题，但连接上千时内存线性增长；连接放进同一进程只要约 40 KB/条。另外镜像里的 ws-proxy 是旧版（Node 自带 WebSocket、地址作参数），与分支上的新版不同。</p></div></li>
+      <li><div class="tr-head"><b>BE 以 DEBUG 级别记录每条 SQL（含聊天内容）；建会话就要 2.5–3.7 s</b><span class="tr-stage">BE</span><span class="tr-flag auto">低</span></div>
+        <div class="tr-body"><p>日志量大、排查困难；BE 转发是优化后首词里最大的一段。</p></div></li>
+    </ol>
+  </section>
+
+  <section id="s-limit">
+    <h2><span class="n">13</span>局限性</h2>
+    <ul class="rkv">
+      <li><b>没做长稳</b>：每段压测不超过 10 分钟（执行环境限制），没有 30–60 分钟的内存泄漏和连接泄漏观察。</li>
+      <li><b>50 人以上没实测</b>：118 放不下更多工具沙箱；单进程约 60 人是根据 50 人时剩余 22.7% 主线程空闲推算的。</li>
+      <li><b>只有一种负载</b>：主助手 → 员工 → bash。模型行为有随机性，每轮工具调用 2–12 次不等，整轮耗时方差大。</li>
+      <li><b>与线上的差异</b>：B 跑在 opensandbox（Docker）而非 ACS；A→B 经 nginx 代替 ALB；A 与 B 不共享磁盘（229 上共享 NAS）；BE 单实例在 118 上与数据库共用 8 核。</li>
+      <li><b>失败分类</b>：<code>ask_user_question</code> 导致的超时是模型在等用户回答，不计为系统故障；委派员工 240 s 内未回报的计为失败。</li>
+      <li><b>会话库数值只代表这台测试机</b>：118 是 8 核共享机、单块云盘，数据库与 BE、平台、发压进程共用 CPU；生产规格不同时需按 CPU 和磁盘换算。会话库回放用的是 30% 抽样语料（与全量分布一致）。</li>
+      <li><b>长连接测试的 B 是替身</b>：一个容器承接全部连接，B 侧用回显程序代替 DSH helper，所以只衡量 harness 一侧的开销；进程内方案测的是 WebSocket 本身，没有叠加 ssh 加密。</li>
+      <li><b>BE 的数据库负载是推算的</b>：只能实测 50 人真实聊天的 BE 负载；"BE 先压满库"的用户数是按每用户 CPU 线性外推，没有实测。</li>
+      <li><b>第 1 轮数据含测试方式的影响</b>：所有用户同时登录 + 工具沙箱一起冷启动，所以稳态（第 2 轮起）更能反映 harness 本身。</li>
+    </ul>
+  </section>
+
+  <section id="s-next">
+    <h2><span class="n">14</span>结论与下一步</h2>
+    <div class="thesis light">
+      <div class="t-kicker">结论</div>
+      <div class="t-main" style="font-size:22px">一个 harness 进程：优化前约 10–12 人，优化后 50 人实测可用，主线程还有约 20% 余量</div>
+      <p>优化前的瓶颈是 DSH 在共享宿主场景下的两段 O(全进程) 写法和 Node 运行时默认值；修掉后 harness 不再是首先碰顶的部分，接下来是支撑侧（B 的内存、BE CPU、BE 建会话耗时）和模型首字的尾部。</p>
+      <p>会话日志存 openGauss 的写入容量约 6000–7000 个活跃用户（8 核测试机），远大于 harness 侧的需求；单用户大量会话不是问题。共用一个库时，BE 的数据库开销才是先碰顶的部分。</p>
+    </div>
+    <div class="g2" style="margin-top:16px">
+      <div class="card"><h3>要撑 100 人同时活跃</h3><div class="tag">按本次数据推算</div>
+        <ul class="rkv">
+          <li><b>harness</b>：2 个优化后的进程（每个约 50 人），或进一步优化后 1–2 个；需要宿主池（BE 按用户分配宿主，已有 PRD，未实现）。内存参考本次实测：50 个常驻、50 人同时活跃时宿主容器约 7.0 GB。</li>
+          <li><b>工具沙箱</b>：100 × 约 80 MB ≈ 8 GB 起，另一台机器或线上 ACS；平台沙箱上限要大于 100。</li>
+          <li><b>BE</b>：先修死锁；就绪等待与冷启动时间对齐或登录预热；启动线程池放大；看 BE 建会话的耗时。</li>
+          <li><b>长连接</b>：3 倍连接数在 50 人规模下按现在的形态够用（约多 2 GB）；先合入僵尸修复。客户端接入后连接若到上千条，改为在 harness 进程内持有连接（每条约 40 KB），并确认 ALB 连接上限与本地端口范围。</li>
+          <li><b>数据库</b>：会话写入在 100 人时只用到容量的约 1–2%，不需要为它扩容；要关注的是 BE 的数据库开销（约为会话的 14 倍）。保持 <code>instr_unique_sql_count</code> 默认值，给数据库预留内存。</li>
+        </ul></div>
+      <div class="card"><h3>下一步可做</h3><div class="tag">按收益排序</div>
+        <ul class="rkv">
+          <li>修 ByClaw 插件里的技能视图重复计算（约 10%，改动在自己仓库）。</li>
+          <li>修 grep/glob 在 B 上的 rg 路径。</li>
+          <li>给 118 腾内存或把 B 放到另一台机器，实测 60 人以上；补一段 30–60 分钟长稳。</li>
+          <li>DSH 侧：ssh 控制命令复用、指令文件 stat 缓存；两个补丁可以提给 DSH 上游。</li>
+          <li>做一次 BE 数据库开销的专项分析（按语句统计每个活跃用户的读写），确认 BE 先压满库的用户数。</li>
+          <li>分支推送与 PR（目前按要求未推送）。</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <section id="s-appx">
+    <h2><span class="n">15</span>附录</h2>
+    <h3 class="sh">数据与脚本位置</h3>
+    <div class="card tblwrap"><table class="data">
+      <tr><th>内容</th><th>位置</th></tr>
+      <tr><td>报告（Markdown 版）</td><td class="wrap"><code>（内部 Markdown 版，未公开）</code></td></tr>
+      <tr><td>优化前原始数据</td><td class="wrap"><code>reports/data/harness-capacity-2026-11-05/</code>：c5、c10、c10b、c15、c20、boot10、warm-heap10g.jsonl、heap-crash-excerpt.txt</td></tr>
+      <tr><td>优化过程与优化后数据</td><td class="wrap"><code>…/single-thread-opt/</code>：prof10、opt1/opt1b/opt2/opt3-* 各阶段，<code>profiles/*.cpuprofile.gz</code>（Chrome DevTools 可打开）</td></tr>
+      <tr><td>功能回归</td><td class="wrap"><code>…/functional/</code>：<code>func-opt-*.json</code>、<code>func-base-*.json</code>、<code>functest.mjs</code></td></tr>
+      <tr><td>会话库压测</td><td class="wrap"><code>…/opengauss/</code>：<code>results/</code>（各档 <code>s*.json</code>、单用户 <code>hot1u-*</code>、<code>fill1u-300</code>、<code>resume*</code>、混合 <code>mix2000b.json</code>，<code>*.samples</code> 为资源采样）、<code>mix-c50b/</code>（混合时的聊天数据）、发压与导出脚本 <code>load.mjs</code>、<code>run.sh</code>、<code>run220.sh</code>、<code>ladder.sh</code>、<code>export.sql</code>、<code>mkcorpus.py</code></td></tr>
+      <tr><td>长连接测试</td><td class="wrap"><code>…/websocket/</code>：<code>out/c*.json</code>、<code>busy300.json</code>（现在的形态）、<code>out/i*.json</code>、<code>busy10000*.json</code>（同一进程内），<code>*.samples.jsonl</code> 为采样；脚本 <code>wsdrive.mjs</code>、<code>inproc.mjs</code>、<code>echo-server.mjs</code>、<code>wsrun.sh</code>、<code>inrun.sh</code></td></tr>
+      <tr><td>压测与采样脚本</td><td class="wrap"><code>load.mjs</code>（虚拟用户）、<code>be.mjs</code>（登录/API）、<code>warm.mjs</code>（逐个预热）、<code>phase.sh</code>（一段压测）、<code>mon220.sh</code>、<code>mon118.sh</code>、<code>dbsnap.sh</code>、<code>summary.py</code>、<code>analyze.py</code>、<code>report.sh</code>、<code>cdp-profile.mjs</code>；118 上在 <code>/opt/perf</code></td></tr>
+      <tr><td>220 宿主</td><td class="wrap"><code>/opt/perf-host/</code>：<code>run-perf-host.sh</code>（优化版）、<code>run-perf-host.sh.v0</code>（原版）、<code>host.env</code>、两个补丁脚本</td></tr>
+      <tr><td>代码</td><td class="wrap">worktree <code>/tmp/byclaw-perf</code>（perf/harness-single-thread）、<code>/tmp/byclaw-session-db</code>（feat/dsh-session-db-d060）</td></tr>
+    </table></div>
+    <h3 class="sh">每个文件的含义</h3>
+    <ul class="rkv">
+      <li><b>turns.jsonl</b>：每轮一行，记录相对发送时刻的 firstFrame、sessionCreated、firstModelToken、toolCall、toolResult、firstAnswerToken、done，以及工具列表、结果、错误。</li>
+      <li><b>mon220.jsonl / mon118.jsonl</b>：采样时间序列。</li>
+      <li><b>db-before.json / db-after.json</b>：语句统计快照；<b>summary.json</b>：汇总；<b>breakdown.json</b>：按会话库事件拆分后的每轮耗时。</li>
+    </ul>
+    <h3 class="sh">复现一段压测</h3>
+    <pre class="cmd"># 220：启动宿主（优化版；原版用 run-perf-host.sh.v0，并把 host.env 的 NODE_OPTIONS 改回只有堆参数）
+bash /opt/perf-host/run-perf-host.sh
+# 118：逐个预热 50 个常驻用户
+cd /opt/perf && node warm.mjs bench:1-50 120000
+# 118：一段压测（标签、用户范围、每人轮数、轮间隔 ms、错开 ms）
+TURN_TIMEOUT_MS=240000 bash phase.sh opt3-c30 bench:1-30 2 5000 250
+bash report.sh opt3-c30          # 汇总 + 第 1 轮 / 稳态拆分
+# 主线程剖析（220，压测进行中）
+docker exec byclaw-multi-host kill -USR1 1
+docker exec byclaw-multi-host node /tmp/cdp-profile.mjs 150 /tmp/x.cpuprofile 1000</pre>
+    <h3 class="sh">环境恢复</h3>
+    <p class="small">两台机器目前仍保持测试状态（220 跑优化版宿主；118 的 BE 指向 220、自身宿主停止、无关服务停止、上述系统参数已改；<code>instr_unique_sql_count</code> 已恢复为 100，<code>sdb_load</code> 下的表已删除，118 的 docker 构建缓存已清理；220 的宿主经 <code>byclaw-pid1</code> 启动，与分支修复一致）。原值与停用清单在两台机器的 <code>[主机备份目录]</code>，BE 的 .env 备份为 <code>[主机备份目录]env.before-perf-20261105</code>。</p>
+  </section>
+
+  </main>
+</div>
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); });
+}, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => {
+  ev.preventDefault();
+  const s = document.getElementById(a.dataset.sec);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', '#' + a.dataset.sec);
+}));
+
+/* ── 标注画笔 ───────────────────────────── */
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer');
+  const bar = document.getElementById('annBar');
+  const launch = document.getElementById('annLaunch');
+  const toggle = document.getElementById('annToggle');
+  const colorEl = document.getElementById('annColor');
+  const sizeEl = document.getElementById('annSize');
+
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = [];
+  const strokes = [];
+
+  let fitting = false;
+  const fit = () => {
+    if (fitting) return;
+    fitting = true;
+    // 先把层收成 0,否则它自己会被算进 scrollWidth/Height,形成只涨不缩的反馈环
+    layer.style.width = '0px';
+    layer.style.height = '0px';
+    const w = document.documentElement.clientWidth;
+    const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    layer.setAttribute('width', w);
+    layer.setAttribute('height', h);
+    layer.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    fitting = false;
+  };
+  fit();
+  addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.body);
+
+  const setOn = v => {
+    on = v;
+    document.body.classList.toggle('ann-on', on);
+    toggle.textContent = on ? '标注中' : '开启标注';
+    toggle.classList.toggle('on', on);
+  };
+
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => {
+    tool = b.dataset.tool;
+    document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b));
+    if (!on) setOn(true);
+    strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; });
+  }));
+
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => {
+    const last = strokes.pop(); if (last) last.remove();
+  });
+  document.getElementById('annClear').addEventListener('click', () => {
+    while (strokes.length) strokes.pop().remove();
+  });
+  document.getElementById('annHide').addEventListener('click', () => {
+    setOn(false); bar.classList.add('hidden'); launch.classList.add('show');
+  });
+  launch.addEventListener('click', () => {
+    bar.classList.remove('hidden'); launch.classList.remove('show');
+  });
+
+  const at = e => {
+    const r = layer.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+
+  layer.addEventListener('pointerdown', e => {
+    if (!on || e.button !== 0) return;
+    if (tool === 'eraser') return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    drawing = true;
+    pts = [at(e)];
+    cur = document.createElementNS(NS, 'path');
+    const w = +sizeEl.value;
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke', colorEl.value);
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    if (tool === 'mark') {
+      cur.setAttribute('stroke-width', w * 3.2);
+      cur.setAttribute('stroke-opacity', '0.32');
+      cur.style.mixBlendMode = 'multiply';
+    } else {
+      cur.setAttribute('stroke-width', w);
+    }
+    cur.style.pointerEvents = 'none';
+    cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`);
+    layer.appendChild(cur);
+  });
+
+  layer.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = at(e), last = pts[pts.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return;
+    pts.push(p);
+    cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`);
+  });
+
+  const end = () => {
+    if (!drawing) return;
+    drawing = false;
+    if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); }
+    cur = null;
+  };
+  layer.addEventListener('pointerup', end);
+  layer.addEventListener('pointercancel', end);
+
+  layer.addEventListener('pointerover', e => {
+    if (on && tool === 'eraser' && e.target !== layer) {
+      const i = strokes.indexOf(e.target);
+      if (i > -1) { strokes.splice(i, 1); e.target.remove(); }
+    }
+  });
+
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape' && on) setOn(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) {
+      e.preventDefault(); const last = strokes.pop(); if (last) last.remove();
+    }
+  });
+})();
+</script>
+</body>
+</html>

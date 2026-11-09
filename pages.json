@@ -1,0 +1,52 @@
+{
+  "groups": [
+    {"id": "byclaw", "title": "ByClaw 方案与汇报", "sub": "Harness 与工具沙箱分离、共享宿主、链路梳理"},
+    {"id": "measure", "title": "实测与部署", "sub": "压测报告、性能测试、集群部署手册"},
+    {"id": "durable", "title": "ByClaw 稳定性规划", "sub": "账本、消息只算一次、模型调用重试"},
+    {"id": "streams", "title": "外部研究 · 持久流与工作流", "sub": "会话事件、断线续读、持久执行"},
+    {"id": "platform", "title": "外部研究 · Agent 平台与沙箱", "sub": "托管 Agent、控制面、microVM、沙箱安全"},
+    {"id": "muse", "title": "Muse 逆向分析", "sub": "Muse 10.0（Meta Endo/Hatch）静态逆向"}
+  ],
+  "pages": [
+    {"group": "byclaw", "file": "ttft-first-token-chain.html", "date": "2026-11-08", "title": "首 token 链路梳理（D0.6.0）", "desc": "从前端发送到首个 token：十个步骤、各段耗时来源和三个优先嫌疑。"},
+    {"group": "byclaw", "file": "agent-infrastructure-briefing-v3.html", "date": "2026-11-02", "title": "ByClaw 工具沙箱与 Harness 分离", "desc": "汇报总览：为什么分离、做到哪、怎么守住安全、下一步。", "older": [["agent-infrastructure-briefing-v2.html", "2026-11-01"], ["agent-infrastructure-briefing.html", "2026-10-30"]]},
+    {"group": "byclaw", "file": "harness-tool-sandbox-split-progress.html", "date": "2026-10-29", "title": "Harness 与工具沙箱解耦：现状与效果", "desc": "解耦做到了哪一步、带来了什么效果。"},
+    {"group": "byclaw", "file": "byclaw-shared-dsh-host-design.html", "date": "2026-10-20", "title": "ByClaw + DSH 共享宿主与多沙箱技术方案", "desc": "多个用户共用一个 DSH 宿主，各自的工具沙箱怎么接。"},
+    {"group": "byclaw", "file": "shared-dsh-n-tools-architecture.html", "date": "2026-10-13", "title": "共享 DSH A + N 工具沙箱：架构与实现", "desc": "一个 A 对多个工具沙箱的架构和实现落点。"},
+    {"group": "byclaw", "file": "dsh-multitenancy-implementation.html", "date": "2026-10-13", "title": "DSH 多租户接入：实现逻辑深析", "desc": "DSH 多租户接入的实现逻辑。"},
+
+    {"group": "measure", "file": "harness-capacity-report-2026-11-05.html", "date": "2026-11-06", "title": "Harness 单进程承载能力测试报告", "desc": "单进程能撑多少用户，openGauss 会话库与 WebSocket 长连接的测试结果。"},
+    {"group": "measure", "file": "shared-dsh-host-benchmark-2026-10-20.html", "date": "2026-10-20", "title": "共享 DSH 宿主性能测试报告", "desc": "共享宿主在多用户下的性能实测。"},
+    {"group": "measure", "file": "cubesandbox-cluster-deployment.html", "date": "2026-10-13", "title": "CubeSandbox 双节点集群部署手册", "desc": "从 0 到 1 搭建双节点 CubeSandbox 集群。"},
+
+    {"group": "durable", "file": "byclaw-durable-roadmap-v2.html", "date": "2026-11-01", "title": "ByClaw 稳定性演进规划：借鉴 Pi Durable", "desc": "稳定性规划总览。", "older": [["byclaw-durable-roadmap.html", "2026-10-30"]]},
+    {"group": "durable", "file": "byclaw-durable-ledger-v2.html", "date": "2026-11-01", "title": "账本怎么贯穿系统", "desc": "用一本账把消息、执行和回复串起来。", "older": [["byclaw-durable-ledger.html", "2026-10-30"]]},
+    {"group": "durable", "file": "byclaw-durable-step-ingress-v2.html", "date": "2026-11-01", "title": "发出消息：一条消息怎么只算一次", "desc": "入口去重与投递语义。", "older": [["byclaw-durable-step-ingress.html", "2026-10-30"]]},
+    {"group": "durable", "file": "byclaw-durable-step-generation-v2.html", "date": "2026-11-01", "title": "调用模型：重试时前端怎么不重复", "desc": "模型调用重试与前端去重。", "older": [["byclaw-durable-step-generation.html", "2026-10-30"]]},
+
+    {"group": "streams", "file": "durable-streams-research.html", "date": "2026-10-13", "title": "Durable Streams：会话事件与断线续读", "desc": "会话事件流和断线续读的做法。"},
+    {"group": "streams", "file": "s2-research.html", "date": "2026-10-13", "title": "S2：持久流存储", "desc": "S2 与 Durable Streams 对照。"},
+    {"group": "streams", "file": "nats-jetstream-research.html", "date": "2026-10-13", "title": "NATS / JetStream", "desc": "持久消息与 Durable Streams 深入对照。"},
+    {"group": "streams", "file": "rocketmq-litetopic-research.html", "date": "2026-10-13", "title": "RocketMQ LiteTopic", "desc": "AI 会话通道与恢复边界。"},
+    {"group": "streams", "file": "temporal-research.html", "date": "2026-10-13", "title": "Temporal：跨进程的持久工作流", "desc": "持久工作流的机制。"},
+    {"group": "streams", "file": "pi-durable-research.html", "date": "2026-10-13", "title": "Pi Durable：持久 Agent Harness", "desc": "持久 Agent Harness 的设计。"},
+    {"group": "streams", "file": "tetral-internals-research.html", "date": "2026-10-14", "title": "Tetral 内部机制", "desc": "持久 Agent、工具结算与故障恢复。"},
+    {"group": "streams", "file": "tetral-next-scaling-summary.html", "date": "2026-10-14", "title": "Tetral：下一个规模化难题", "desc": "中文摘要与项目解读。"},
+    {"group": "streams", "file": "grok-message-delivery-research.html", "date": "2026-10-13", "title": "Grok Bot 消息投递", "desc": "Agent 回应策略与 Streams 的异同。"},
+
+    {"group": "platform", "file": "claude-managed-agents-deep-dive.html", "date": "2026-10-30", "title": "Claude Managed Agents：工作原理深析", "desc": "托管 Agent 的工作原理。"},
+    {"group": "platform", "file": "openclaw-enterprise-research.html", "date": "2026-10-13", "title": "OpenClaw Enterprise：Agent 控制面", "desc": "企业版 Agent 控制面。"},
+    {"group": "platform", "file": "ax-substrate-research.html", "date": "2026-10-13", "title": "AX 与 Agent Substrate", "desc": "定位、机制与项目关联。"},
+    {"group": "platform", "file": "firecracker-research.html", "date": "2026-10-13", "title": "Firecracker：microVM 执行底层", "desc": "microVM 作为执行底层。"},
+    {"group": "platform", "file": "aaas-architecture-summary-v2.html", "date": "2026-11-01", "title": "Agent as a Service 架构", "desc": "文章总结。", "older": [["aaas-architecture-summary.html", "2026-10-31"]]},
+    {"group": "platform", "file": "sandbox-state-security-summary-v2.html", "date": "2026-11-01", "title": "快照、克隆与回滚：Agent 沙箱的新安全问题", "desc": "文章总结。", "older": [["sandbox-state-security-summary.html", "2026-10-30"]]},
+    {"group": "platform", "file": "superagent-infra-summary-v2.html", "date": "2026-11-01", "title": "从 Super-agent 能借鉴什么基础设施", "desc": "可借鉴的基础设施。"},
+
+    {"group": "muse", "file": "muse-architecture.html", "date": "2026-11-02", "title": "Muse 10.0 Agent 应用静态逆向分析", "desc": "整体架构报告。"},
+    {"group": "muse", "file": "muse-dataflow.html", "date": "2026-11-01", "title": "Muse 数据流架构", "desc": "共享入口、vm_id 分发、鉴权链与 Agent 交互。"},
+    {"group": "muse", "file": "muse-design.html", "date": "2026-11-01", "title": "Muse Agent 详细设计", "desc": "会话、运行时、文件、资料库与记忆。"},
+    {"group": "muse", "file": "muse-scale.html", "date": "2026-11-01", "title": "几亿人连同一个地址", "desc": "海量长连接是怎么扛住的。"},
+    {"group": "muse", "file": "muse-hatch-runtime-architecture.html", "date": "2026-10-14", "title": "Muse / Hatch 运行时架构", "desc": "Cloud Hypervisor、Cell 与 Agent Loop。"},
+    {"group": "muse", "file": "muse-hatch-binary-analysis.html", "date": "2026-10-14", "title": "Muse / Hatch 二进制分析", "desc": "strings 与系统地图的证据边界。"}
+  ]
+}

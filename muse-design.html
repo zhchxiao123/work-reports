@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muse Agent 详细设计：会话、运行时、文件、资料库与记忆</title>
+<style>
+  :root {
+    --ivory:#FAF9F5; --slate:#141413; --clay:#D97757; --oat:#E3DACC; --olive:#788C5D; --rust:#B04A3F;
+    --gray-150:#F0EEE6; --gray-300:#D1CFC5; --gray-500:#87867F; --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) { .sheet { grid-template-columns: 1fr; gap: 24px; } .sidenav { position: static; } .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; } .navhint { display: none; } }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; } .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; } .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; } .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; }
+  .bridge b { font-weight: 600; } .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); } .card p + p { margin-top: 8px; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); } figcaption b { color: var(--slate); }
+  .fig-h { font-size: 12.5px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab { font-size: 11px; fill: var(--gray-700); } .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); } .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .box { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; } .rf .box-d { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; } .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln { stroke: var(--gray-500); stroke-width: 1.5; fill: none; } .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; } .rf .ln-ok { stroke: var(--olive); stroke-width: 1.5; fill: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); } tr:last-child td { border-bottom: none; }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); } .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; } ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; } ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; } ul.rkv b { color: var(--slate); }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  ol.trace > li.human { border-color: var(--clay); background: rgba(217,119,87,0.04); } ol.trace > li.human::before { background: rgba(217,119,87,0.16); border-color: var(--clay); color: var(--rust); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; } .tr-head b { font-size: 14px; }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-flag { margin-left: auto; font-family: var(--mono); font-size: 10px; white-space: nowrap; border-radius: 999px; padding: 2px 10px; background: rgba(217,119,87,0.14); border: 1px solid var(--clay); color: var(--rust); font-weight: 600; }
+  .tr-flag.auto { background: var(--gray-150); border-color: var(--gray-300); color: var(--gray-500); font-weight: 400; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; } .tr-body p:last-child { margin-bottom: 0; } .tr-body b { color: var(--slate); }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; margin-top: 9px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; } @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; margin-bottom: 4px; } .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; } .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); } .stat.hot .s-num { color: var(--rust); }
+  blockquote.raw { border-left: 3px solid var(--oat); background: var(--gray-150); border-radius: 0 8px 8px 0; padding: 11px 15px; margin: 12px 0; font-size: 12.5px; line-height: 1.75; color: var(--gray-700); } blockquote.raw b { color: var(--slate); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); } .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); } .badge.no { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; } .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; } .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; } body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; } .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); } .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; } .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; } .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button><span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen">画笔</button><button class="ann-tool" data-tool="mark">荧光笔</button><button class="ann-tool" data-tool="eraser">橡皮擦</button><span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757"><input type="range" id="annSize" min="2" max="26" value="4"><span class="sep"></span>
+  <button id="annUndo">撤销</button><button id="annClear">清空</button><button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch">✎ 标注</button>
+
+<div class="sheet">
+  <aside class="sidenav">
+    <div class="brand">
+      <div class="brand-eyebrow">逆向分析报告 · 第二篇</div>
+      <div class="brand-title">Muse Agent<br>详细设计</div>
+      <div class="brand-sub">com.meta.endo 10.0 · 2026-11-01</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#sec-thesis" data-sec="sec-thesis"><span class="num">01</span><span>结论</span></a>
+      <a href="#sec-ia" data-sec="sec-ia"><span class="num">02</span><span>信息架构</span></a>
+      <a href="#sec-session" data-sec="sec-session"><span class="num">03</span><span>会话模型：主聊与侧聊</span></a>
+      <a href="#sec-msg" data-sec="sec-msg"><span class="num">04</span><span>消息与流式事件</span></a>
+      <a href="#sec-runtime" data-sec="sec-runtime"><span class="num">05</span><span>运行时内部逻辑</span></a>
+      <a href="#sec-approval" data-sec="sec-approval"><span class="num">06</span><span>审批与出网管控</span></a>
+      <a href="#sec-fs" data-sec="sec-fs"><span class="num">07</span><span>文件系统与文件管理</span></a>
+      <a href="#sec-lib" data-sec="sec-lib"><span class="num">08</span><span>资料库与工件</span></a>
+      <a href="#sec-mem" data-sec="sec-mem"><span class="num">09</span><span>记忆系统</span></a>
+      <a href="#sec-share" data-sec="sec-share"><span class="num">10</span><span>共享 Agent 与 Peers</span></a>
+      <a href="#sec-gap" data-sec="sec-gap"><span class="num">11</span><span>待验证与边界</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 正文连续滚动 · 右侧可圈画标注</div>
+  </aside>
+
+  <main class="main">
+  <header>
+    <div class="eyebrow">Static analysis of the embedded web client (47 MB) + native strings · no runtime observation</div>
+    <h1>Muse Agent 详细设计：会话、运行时、文件、资料库与记忆</h1>
+    <p class="lead">第一篇报告回答了"基础设施、数据流、组网、互联"。本篇深入 agent 本身：它如何组织会话（主聊、线程、侧聊、目标线程），一轮对话内部发生什么（事件流、lane、工具路由、子代理、压缩），文件与资料库怎么落在 VM 文件系统上，记忆是什么形态，以及共享 agent 与 peers 的设计。证据主要来自内嵌 web 客户端中的 <strong>218 条网关路由、4152 条界面文案、事件与字段名</strong>。</p>
+  </header>
+
+  <section id="sec-thesis" style="margin-top:4px">
+    <h2><span class="n">01</span>结论</h2>
+    <div class="thesis">
+      <div class="t-kicker">一句话</div>
+      <div class="t-main">Muse 的 agent 是一个<em>"以文件系统为真相源"</em>的运行时：对话转录、记忆、工件、Spaces、播客都是 VM 家目录下的文件，资料库只是这些文件的视图；对话本身则是一条带 lane 的事件流。</div>
+      <p><strong>会话</strong>：一个不可删除的主聊（canonical main chat）+ 任意多个线程；线程可以挂在目标（goal）上；侧聊面板承载线程、共享 agent 的私有侧聊和 peer 侧聊；<code>/thread/new</code> 是草稿线程，首条消息才创建会话。</p>
+      <p><strong>一轮对话</strong>：客户端发 <code>chat.send</code>，服务端用 <code>delta.*</code> 事件推回：message_start → text_append → tool_start/tool_done → placeholder/presentation → compaction_start/done → turn_done。消息带 lane（main / subagent / critical / normal），子代理推理单独成 lane。</p>
+      <p><strong>工具路由</strong>：服务端工具（<code>tool.exec</code> / <code>tool.imagine</code> / <code>tool.zeitgeist</code> / <code>tool.web_fetch</code>）、本机节点工具（<code>nodes.invoke_*</code>）、VM 浏览器任务（owner 可为 user / main_agent / cron，可被用户接管）三类并存，统一经审批与名为 <strong>sentinel</strong> 的出网管控。</p>
+      <p><strong>文件</strong>：两套文件系统并存，Mac 侧 <code>files.*</code>（经节点）与 VM 侧 <code>fs.*</code>；VM 布局为 <code>/home/hatch/workspace/</code> 下 your_files、artifacts、podcasts、conversations，根记忆文件 <code>/MEMORY.md</code>。<strong>记忆</strong>是可搜索、可合并（consolidate）、可重建索引的 Markdown 文件集。</p>
+    </div>
+  </section>
+
+  <div class="bridge"><b>先看壳：用户能进入哪些面板。</b><span class="to">↓　这决定了后面每个子系统的入口。</span></div>
+
+  <section id="sec-ia">
+    <h2><span class="n">02</span>信息架构</h2>
+    <p class="sub">从 web 客户端的 <code>SHELL_PATH</code>、路由追踪策略（<code>hatch.*</code>）和 agent 可驱动的 27 个 UI 动作（<code>ui.navigate.*</code>）还原出的面板结构。</p>
+    <figure>
+      <div class="fig-h">图 1 · 壳层信息架构<span>主区 · 侧面板 · 覆盖层</span></div>
+      <svg class="rf" viewBox="0 0 760 330" role="img" aria-label="信息架构">
+        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <rect class="box-x" x="14" y="14" width="236" height="300" rx="10"/>
+        <text x="132" y="38" text-anchor="middle" style="fill:#141413;font-weight:600">主区（Chat）</text>
+        <text x="132" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/ 主聊 · /thread/{id} 线程</text>
+        <text x="132" y="76" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/thread/new 草稿 · ?goal= 目标线程</text>
+        <text x="132" y="92" class="tiny" text-anchor="middle" style="fill:#3D3D3A">composer · 审批卡 · widgets</text>
+        <line x1="30" y1="106" x2="234" y2="106" stroke="#D1CFC5"/>
+        <text x="132" y="126" text-anchor="middle" style="fill:#141413;font-weight:600">Library 资料库</text>
+        <text x="132" y="146" class="tiny" text-anchor="middle" style="fill:#3D3D3A">recent · artifacts · documents · files</text>
+        <text x="132" y="162" class="tiny" text-anchor="middle" style="fill:#3D3D3A">media · podcasts · slides · spaces</text>
+        <line x1="30" y1="176" x2="234" y2="176" stroke="#D1CFC5"/>
+        <text x="132" y="196" text-anchor="middle" style="fill:#141413;font-weight:600">Goals · Ideas · Feed</text>
+        <text x="132" y="216" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/goals/{id} · ideas(explore) · feed 版次</text>
+        <line x1="30" y1="230" x2="234" y2="230" stroke="#D1CFC5"/>
+        <text x="132" y="250" text-anchor="middle" style="fill:#141413;font-weight:600">Spaces</text>
+        <text x="132" y="270" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/spaces/v2/{slug} · 公开 slug</text>
+        <text x="132" y="296" class="mono" text-anchor="middle" style="fill:#87867F">ui.navigate.* 可由 agent 触发</text>
+        <rect class="box" x="270" y="14" width="236" height="144" rx="10"/>
+        <text x="388" y="38" text-anchor="middle" style="fill:#141413;font-weight:600">侧面板：Side chats</text>
+        <text x="388" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">SideChatsPanel（宽 240–420）</text>
+        <text x="388" y="76" class="tiny" text-anchor="middle" style="fill:#3D3D3A">线程列表 · 固定/归档 · 未读数</text>
+        <text x="388" y="92" class="tiny" text-anchor="middle" style="fill:#3D3D3A">共享 agent 私有侧聊</text>
+        <text x="388" y="108" class="tiny" text-anchor="middle" style="fill:#3D3D3A">peer 侧聊（只读态可见）</text>
+        <text x="388" y="124" class="tiny" text-anchor="middle" style="fill:#3D3D3A">空间关联：space_slug</text>
+        <text x="388" y="146" class="mono" text-anchor="middle" style="fill:#87867F">sessions.list · session.pin/archive</text>
+        <rect class="box" x="270" y="170" width="236" height="144" rx="10"/>
+        <text x="388" y="194" text-anchor="middle" style="fill:#141413;font-weight:600">侧面板：Activity / Status</text>
+        <text x="388" y="216" class="tiny" text-anchor="middle" style="fill:#3D3D3A">activity.list · 目标动作时间线</text>
+        <text x="388" y="232" class="tiny" text-anchor="middle" style="fill:#3D3D3A">status-panel tab=upcoming：定时任务</text>
+        <text x="388" y="248" class="tiny" text-anchor="middle" style="fill:#3D3D3A">identity · 节点列表 · VM 健康</text>
+        <text x="388" y="264" class="tiny" text-anchor="middle" style="fill:#3D3D3A">MEMORY 文件卡（ACCESS WITH CARE）</text>
+        <text x="388" y="300" class="mono" text-anchor="middle" style="fill:#87867F">activity.subscribe · tasks.subscribe</text>
+        <rect class="box-d" x="526" y="14" width="220" height="300" rx="10"/>
+        <text x="636" y="38" text-anchor="middle" style="fill:#141413;font-weight:600">覆盖层 / 对话框</text>
+        <text x="636" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Settings（connectors · identity）</text>
+        <text x="636" y="76" class="tiny" text-anchor="middle" style="fill:#3D3D3A">审批编辑器 approvals.editor</text>
+        <text x="636" y="92" class="tiny" text-anchor="middle" style="fill:#3D3D3A">文件查看器 file-dialog</text>
+        <text x="636" y="108" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Slides 查看器 · PDF · Markdown 编辑器</text>
+        <text x="636" y="124" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Space 分享 / 工件分享</text>
+        <text x="636" y="140" class="tiny" text-anchor="middle" style="fill:#3D3D3A">共享 agent 定义页</text>
+        <text x="636" y="156" class="tiny" text-anchor="middle" style="fill:#3D3D3A">语音通话面板 · 听写</text>
+        <text x="636" y="172" class="tiny" text-anchor="middle" style="fill:#3D3D3A">CVM PIN 解锁 / 复核</text>
+        <text x="636" y="188" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Bug report · 快捷键 · 主题</text>
+        <text x="636" y="214" class="tiny" text-anchor="middle" style="fill:#87867F">原生：QuickChat 浮窗</text>
+        <text x="636" y="230" class="tiny" text-anchor="middle" style="fill:#87867F">原生：电脑控制画中画</text>
+        <text x="636" y="246" class="tiny" text-anchor="middle" style="fill:#87867F">原生：Spaces 覆盖窗</text>
+      </svg>
+      <figcaption><b>agent 自己也能导航这套 UI</b>：web 客户端向网关注册 <code>hatch_app_commands</code>，agent 可调用 <code>ui.navigate.chat.session</code>、<code>ui.navigate.library.item</code>、<code>ui.navigate.memory.item</code>、<code>ui.navigate.scheduled.task</code>、<code>ui.highlight</code> 等 27 个动作把用户带到对应位置。</figcaption>
+    </figure>
+    <div class="stats">
+      <div class="stat hot"><div class="s-num">218</div><div class="s-lab">网关路由（68 个命名空间）</div><div class="s-sub">method → REST，部分 noiseOnly</div></div>
+      <div class="stat"><div class="s-num">27</div><div class="s-lab">agent 可驱动的 UI 动作</div><div class="s-sub">ui.navigate.* / ui.set.*</div></div>
+      <div class="stat"><div class="s-num">8</div><div class="s-lab">资料库分区</div><div class="s-sub">含 slides 与 spaces</div></div>
+      <div class="stat"><div class="s-num">4</div><div class="s-lab">消息 lane</div><div class="s-sub">main · subagent · critical · normal</div></div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>壳层的中心是聊天。</b><span class="to">↓　聊天是怎么被切成主聊、线程和侧聊的？</span></div>
+
+  <section id="sec-session">
+    <h2><span class="n">03</span>会话模型：主聊与侧聊</h2>
+    <p class="sub">后端对象叫 <strong>session</strong>，界面上叫 thread / side chat。主聊是唯一特殊的 session；其余都是平等的线程，差别只在它们<strong>挂在什么东西上</strong>。</p>
+    <figure>
+      <div class="fig-h">图 2 · 会话分类<span>一个 VM 内的所有会话</span></div>
+      <svg class="rf" viewBox="0 0 760 290" role="img" aria-label="会话分类">
+        <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <rect class="box-ok" x="280" y="14" width="200" height="54" rx="10"/>
+        <text x="380" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">session（VM 内对象）</text>
+        <text x="380" y="54" class="tiny" text-anchor="middle" style="fill:#3D3D3A">pinned · archived · unread_count</text>
+        <path class="ln" d="M330,70 L100,118" marker-end="url(#a2)"/>
+        <path class="ln" d="M365,70 L290,118" marker-end="url(#a2)"/>
+        <path class="ln" d="M395,70 L470,118" marker-end="url(#a2)"/>
+        <path class="ln" d="M430,70 L660,118" marker-end="url(#a2)"/>
+        <rect class="box-x" x="14" y="122" width="170" height="150" rx="10"/>
+        <text x="99" y="144" text-anchor="middle" style="fill:#141413;font-weight:600">主聊 main chat</text>
+        <text x="99" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">路由 /，kind=main</text>
+        <text x="99" y="180" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"canonical main chat thread"</text>
+        <text x="99" y="196" class="tiny" text-anchor="middle" style="fill:#3D3D3A">不能删除（文案明确）</text>
+        <text x="99" y="212" class="tiny" text-anchor="middle" style="fill:#3D3D3A">通话位置随主聊保存</text>
+        <text x="99" y="228" class="tiny" text-anchor="middle" style="fill:#3D3D3A">可向共享 agent 共享</text>
+        <text x="99" y="244" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"bounded copy of recent"</text>
+        <text x="99" y="262" class="mono" text-anchor="middle" style="fill:#87867F">chat.main</text>
+        <rect class="box" x="204" y="122" width="170" height="150" rx="10"/>
+        <text x="289" y="144" text-anchor="middle" style="fill:#141413;font-weight:600">线程 / 侧聊</text>
+        <text x="289" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/thread/{sessionId}</text>
+        <text x="289" y="180" class="tiny" text-anchor="middle" style="fill:#3D3D3A">草稿 /thread/new，首条消息建会话</text>
+        <text x="289" y="196" class="tiny" text-anchor="middle" style="fill:#3D3D3A">可改名 / 固定 / 归档 / 删除</text>
+        <text x="289" y="212" class="tiny" text-anchor="middle" style="fill:#3D3D3A">侧聊面板按最近访问排序</text>
+        <text x="289" y="228" class="tiny" text-anchor="middle" style="fill:#3D3D3A">占位 "Message in {name}"</text>
+        <text x="289" y="244" class="tiny" text-anchor="middle" style="fill:#3D3D3A">本地缓存转录 + 最近访问时间</text>
+        <text x="289" y="262" class="mono" text-anchor="middle" style="fill:#87867F">session.start / rename / pin</text>
+        <rect class="box" x="394" y="122" width="170" height="150" rx="10"/>
+        <text x="479" y="144" text-anchor="middle" style="fill:#141413;font-weight:600">目标线程 goal thread</text>
+        <text x="479" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/thread/{id}?goal={goalId}</text>
+        <text x="479" y="180" class="tiny" text-anchor="middle" style="fill:#3D3D3A">?goal_intent= 开启意图</text>
+        <text x="479" y="196" class="tiny" text-anchor="middle" style="fill:#3D3D3A">"start a {category} goal"</text>
+        <text x="479" y="212" class="tiny" text-anchor="middle" style="fill:#3D3D3A">目标动作时间线 activity</text>
+        <text x="479" y="228" class="tiny" text-anchor="middle" style="fill:#3D3D3A">建 VM 时创建默认目标</text>
+        <text x="479" y="244" class="tiny" text-anchor="middle" style="fill:#3D3D3A">目标暂不支持嵌套</text>
+        <text x="479" y="262" class="mono" text-anchor="middle" style="fill:#87867F">goals.* · goal_prompt</text>
+        <rect class="box-d" x="584" y="122" width="162" height="150" rx="10"/>
+        <text x="665" y="144" text-anchor="middle" style="fill:#141413;font-weight:600">特殊侧聊</text>
+        <text x="665" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">共享 agent 私有侧聊</text>
+        <text x="665" y="180" class="tiny" text-anchor="middle" style="fill:#3D3D3A">（owner-only，随定义创建）</text>
+        <text x="665" y="196" class="tiny" text-anchor="middle" style="fill:#3D3D3A">peer 侧聊（对方 agent）</text>
+        <text x="665" y="212" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Space 关联会话 space_slug</text>
+        <text x="665" y="228" class="tiny" text-anchor="middle" style="fill:#3D3D3A">side-by-side 对比聊天</text>
+        <text x="665" y="244" class="tiny" text-anchor="middle" style="fill:#3D3D3A">（chat.sxs.select 选优）</text>
+        <text x="665" y="262" class="mono" text-anchor="middle" style="fill:#87867F">shared_agents · peers</text>
+      </svg>
+      <figcaption><b>"侧聊"不是另一种对象，而是主聊之外所有会话在界面上的统称</b>。真正的区分维度是：挂在目标上、属于共享 agent、属于 peer、关联某个 Space，还是普通线程。</figcaption>
+    </figure>
+    <div class="card">
+      <table>
+        <tr><th style="width:22%">操作</th><th style="width:34%">路由</th><th>说明</th></tr>
+        <tr><td>列出会话</td><td><code>GET /api/session/list</code>、<code>/api/session/list/{id}</code></td><td>返回 pinned / archived / unread_count / space_slug；侧聊面板与本地缓存（<code>isSideChatListCacheEntry</code>）据此渲染。</td></tr>
+        <tr><td>创建</td><td><code>POST /session/start</code></td><td>草稿线程路由 <code>/thread/new</code>；草稿历史源键 <code>hatch.chat.draft</code>，首条消息发出时才真正创建。</td></tr>
+        <tr><td>管理</td><td><code>/session/rename · pin · unpin · archive · unarchive · delete</code></td><td>文案 "Thread rename is not available on this VM yet" 说明部分能力按 VM 版本灰度。</td></tr>
+        <tr><td>主聊</td><td><code>chat.main</code>，路由 <code>/</code></td><td>"The canonical main chat thread"；在共享 agent 作用域里可被整体共享为"有界最近消息副本"。</td></tr>
+        <tr><td>目标线程</td><td><code>/thread/{id}?goal=…&amp;goal_intent=…</code></td><td>线程与 goal 绑定；<code>activity.goal_actions</code> 给出该目标下 agent 做过的动作。</td></tr>
+        <tr><td>读取历史</td><td><code>GET /chat/history</code>、<code>/chat/history-window</code>、<code>/chat/message</code>、<code>/chat/search</code></td><td>history-window 带最大响应字节数限制；<code>chat.delete_turn</code> 可删一轮。</td></tr>
+        <tr><td>已读与催促</td><td><code>POST /api/chat/{thread_id}/seen</code>、<code>/chat/unread-count</code>、<code>/chat/poke</code></td><td><code>chat.poke</code> 推断为"戳一下 agent 继续"的轻量触发。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>会话模型很扁平，复杂度被推到了<b>作用域</b>（goal、shared agent、peer、space）和<b>本地缓存</b>（转录按 sessionId 缓存并记录最近访问）上。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>会话是容器。</b><span class="to">↓　容器里的消息长什么样，一轮对话如何被推送到界面？</span></div>
+
+  <section id="sec-msg">
+    <h2><span class="n">04</span>消息与流式事件</h2>
+    <p class="sub">消息对象的字段、事件流的类型和顺序，都能从 web 客户端的归一化与分组函数里直接读出来。</p>
+    <figure>
+      <div class="fig-h">图 3 · 一轮对话的事件时间线<span>chat.stream_events 的 delta.* 序列</span></div>
+      <svg class="rf" viewBox="0 0 760 250" role="img" aria-label="事件时间线">
+        <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <line x1="20" y1="60" x2="740" y2="60" stroke="#D1CFC5" stroke-width="1.5"/>
+        <text x="20" y="40" class="lab" style="fill:#3D3D3A">lane = main（用户可见主线）</text>
+        <g>
+          <rect class="box-x" x="20" y="72" width="92" height="40" rx="8"/><text x="66" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">message_start</text><text x="66" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">messageId · seq</text>
+          <rect class="box" x="124" y="72" width="92" height="40" rx="8"/><text x="170" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">text_append</text><text x="170" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">增量文本 ×N</text>
+          <rect class="box" x="228" y="72" width="92" height="40" rx="8"/><text x="274" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">tool_start</text><text x="274" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">id · name</text>
+          <rect class="box" x="332" y="72" width="92" height="40" rx="8"/><text x="378" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">placeholder</text><text x="378" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">→ resolved</text>
+          <rect class="box" x="436" y="72" width="92" height="40" rx="8"/><text x="482" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">tool_done</text><text x="482" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">result · status</text>
+          <rect class="box" x="540" y="72" width="92" height="40" rx="8"/><text x="586" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">presentation</text><text x="586" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">widgets · 卡片</text>
+          <rect class="box-ok" x="644" y="72" width="96" height="40" rx="8"/><text x="692" y="89" class="tiny" text-anchor="middle" style="fill:#141413;font-weight:600">message_done</text><text x="692" y="103" class="tiny" text-anchor="middle" style="fill:#3D3D3A">→ turn_done</text>
+        </g>
+        <line x1="20" y1="150" x2="740" y2="150" stroke="#D1CFC5" stroke-width="1.5"/>
+        <text x="20" y="134" class="lab" style="fill:#3D3D3A">lane = subagent（子代理推理，界面标 SUBAGENT）</text>
+        <rect class="box-d" x="208" y="160" width="340" height="34" rx="8"/><text x="378" y="181" class="tiny" text-anchor="middle" style="fill:#3D3D3A">message_start … text_append … message_done（isBackground）</text>
+        <line x1="20" y1="214" x2="740" y2="214" stroke="#D1CFC5" stroke-width="1.5"/>
+        <text x="20" y="206" class="lab" style="fill:#3D3D3A">跨 lane 事件</text>
+        <rect class="box" x="20" y="222" width="150" height="22" rx="6"/><text x="95" y="237" class="tiny" text-anchor="middle" style="fill:#3D3D3A">compaction_start/done</text>
+        <rect class="box" x="182" y="222" width="130" height="22" rx="6"/><text x="247" y="237" class="tiny" text-anchor="middle" style="fill:#3D3D3A">message_removed</text>
+        <rect class="box" x="324" y="222" width="100" height="22" rx="6"/><text x="374" y="237" class="tiny" text-anchor="middle" style="fill:#3D3D3A">marker</text>
+        <rect class="box" x="436" y="222" width="150" height="22" rx="6"/><text x="511" y="237" class="tiny" text-anchor="middle" style="fill:#3D3D3A">approval（审批卡）</text>
+        <rect class="box" x="598" y="222" width="142" height="22" rx="6"/><text x="669" y="237" class="tiny" text-anchor="middle" style="fill:#3D3D3A">widgets.state.patch</text>
+      </svg>
+      <figcaption><b>事件带 seq、messageId、lane 三元组</b>，客户端据此合并；compaction 事件带 phase 与 reason，说明上下文压缩是服务端在轮次之间显式执行并通知界面的。</figcaption>
+    </figure>
+    <div class="g2">
+      <div class="card">
+        <h3>消息对象</h3><div class="tag">从 isChatMessageEligible* / mergeToolCallData 还原</div>
+        <ul class="rkv">
+          <li><b>role</b>：user / assistant / system。</li>
+          <li><b>标志</b>：<code>isBackground</code>（后台工作产出，不参与气泡分组）、<code>isToolTranscript</code>（工具转录）、<code>presentationCarrier</code>（仅承载展示）。</li>
+          <li><b>toolCall</b>：{toolCallId, name, toolType, request, result, status}，status 为 running / completed / failed 等。</li>
+          <li><b>compaction</b>：{phase, reason}，有压缩的消息不可加反应、不计时间戳。</li>
+          <li><b>内容槽</b>：text、images、files、widgets、presentations、placeholders、citations、attachments、reactions。</li>
+          <li><b>排序</b>：sortSeq；运行中的 toolCall 保持原位直到完成。</li>
+          <li><b>审批</b>：approvalId 关联审批卡；checkpoint 字段用于轮次分隔线。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>widget 种类（部分）</h3><div class="tag">kind === … 枚举中与内容相关的值</div>
+        <p><code>browser_task</code>（浏览器任务卡，含截图与步骤）· <code>artifact</code> · <code>space</code> · <code>saved_space</code> · <code>file</code> · <code>image</code> · <code>video</code> · <code>thread</code> / <code>chat_thread</code>（引用其它线程）· <code>goal</code> · <code>citation</code> · <code>local_map</code> · <code>hero_image</code> · <code>unit_media</code>（feed 媒体）· <code>person</code> · <code>cart</code> / <code>hotel_results</code> / <code>ads_entity</code>（购物、酒店、广告实体）· <code>shared_agent</code> · <code>invite</code> · <code>token_input</code>。</p>
+        <p>widget 有自己的状态通道：<code>widgets.state.set / patch</code>，并有 <code>chat.widget.normalize</code> 做服务端归一化。<span class="warn">购物、酒店、广告类 widget 表明对话里有商业化实体卡。</span></p>
+      </div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>界面看到的是事件。</b><span class="to">↓　事件背后，agent 一轮里到底做了哪些决策？</span></div>
+
+  <section id="sec-runtime">
+    <h2><span class="n">05</span>运行时内部逻辑</h2>
+    <p class="sub">把路由、事件和文案拼起来，能还原出一个<strong>"主代理 + 子代理 + 三类工具后端 + 定时触发"</strong>的运行时轮廓。以下按一轮对话的决策顺序排列。</p>
+    <figure>
+      <div class="fig-h">图 4 · 运行时与工具路由<span>中心：主代理 · 四周：触发源、工具后端、持久化</span></div>
+      <svg class="rf" viewBox="0 0 760 330" role="img" aria-label="运行时与工具路由">
+        <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker><marker id="a4r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker></defs>
+        <rect class="box-d" x="14" y="14" width="150" height="110" rx="10"/>
+        <text x="89" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">触发源</text>
+        <text x="89" y="56" class="tiny" text-anchor="middle" style="fill:#3D3D3A">用户消息 chat.send</text>
+        <text x="89" y="72" class="tiny" text-anchor="middle" style="fill:#3D3D3A">定时任务 cron（tasks.run）</text>
+        <text x="89" y="88" class="tiny" text-anchor="middle" style="fill:#3D3D3A">渠道消息 WhatsApp/Messenger</text>
+        <text x="89" y="104" class="tiny" text-anchor="middle" style="fill:#3D3D3A">peer 投递 · 语音通话</text>
+        <rect class="box-ok" x="280" y="14" width="200" height="110" rx="10"/>
+        <text x="380" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">主代理 main_agent</text>
+        <text x="380" y="56" class="tiny" text-anchor="middle" style="fill:#3D3D3A">model.get/set（generation 版本化）</text>
+        <text x="380" y="72" class="tiny" text-anchor="middle" style="fill:#3D3D3A">skills.list · 可禁用</text>
+        <text x="380" y="88" class="tiny" text-anchor="middle" style="fill:#3D3D3A">lane=main 输出 · 轮次 turn_done</text>
+        <text x="380" y="104" class="tiny" text-anchor="middle" style="fill:#3D3D3A">compaction（phase/reason）</text>
+        <rect class="box" x="596" y="14" width="150" height="110" rx="10"/>
+        <text x="671" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">子代理 subagents</text>
+        <text x="671" y="56" class="tiny" text-anchor="middle" style="fill:#3D3D3A">subagents.list / status</text>
+        <text x="671" y="72" class="tiny" text-anchor="middle" style="fill:#3D3D3A">lane=subagent 推理</text>
+        <text x="671" y="88" class="tiny" text-anchor="middle" style="fill:#3D3D3A">界面标 SUBAGENT</text>
+        <text x="671" y="104" class="tiny" text-anchor="middle" style="fill:#3D3D3A">五种协作人设模板</text>
+        <path class="ln" d="M166,69 L276,69" marker-end="url(#a4)"/>
+        <path class="ln" d="M482,69 L592,69" marker-end="url(#a4)"/>
+        <path class="ln" d="M592,80 L482,80" marker-end="url(#a4)"/>
+        <rect class="box" x="14" y="190" width="220" height="124" rx="10"/>
+        <text x="124" y="212" text-anchor="middle" style="fill:#141413;font-weight:600">服务端工具（VM 内）</text>
+        <text x="124" y="232" class="tiny" text-anchor="middle" style="fill:#3D3D3A">tool.exec（执行）· tool.web_fetch</text>
+        <text x="124" y="248" class="tiny" text-anchor="middle" style="fill:#3D3D3A">tool.imagine（生图）· tool.zeitgeist</text>
+        <text x="124" y="264" class="tiny" text-anchor="middle" style="fill:#3D3D3A">VM 浏览器 browser.lease</text>
+        <text x="124" y="280" class="tiny" text-anchor="middle" style="fill:#3D3D3A">browser_task（可 takeover）</text>
+        <text x="124" y="300" class="mono" text-anchor="middle" style="fill:#87867F">出网经 sentinel</text>
+        <rect class="box" x="270" y="190" width="220" height="124" rx="10"/>
+        <text x="380" y="212" text-anchor="middle" style="fill:#141413;font-weight:600">节点工具（Mac / web）</text>
+        <text x="380" y="232" class="tiny" text-anchor="middle" style="fill:#3D3D3A">nodes.sync → invoke → invoke_ack</text>
+        <text x="380" y="248" class="tiny" text-anchor="middle" style="fill:#3D3D3A">nodes.invoke_result（回执）</text>
+        <text x="380" y="264" class="tiny" text-anchor="middle" style="fill:#3D3D3A">web 也是节点：client.invoke.result</text>
+        <text x="380" y="280" class="tiny" text-anchor="middle" style="fill:#3D3D3A">device_commands + hatch_app_commands</text>
+        <text x="380" y="300" class="mono" text-anchor="middle" style="fill:#87867F">HITL 审批卡</text>
+        <rect class="box" x="526" y="190" width="220" height="124" rx="10"/>
+        <text x="636" y="212" text-anchor="middle" style="fill:#141413;font-weight:600">持久化（VM 文件系统）</text>
+        <text x="636" y="232" class="tiny" text-anchor="middle" style="fill:#3D3D3A">conversations/{id}/transcript</text>
+        <text x="636" y="248" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/MEMORY.md + 记忆条目</text>
+        <text x="636" y="264" class="tiny" text-anchor="middle" style="fill:#3D3D3A">artifacts/ · podcasts/ · spaces</text>
+        <text x="636" y="280" class="tiny" text-anchor="middle" style="fill:#3D3D3A">git.log / show_file（版本化）</text>
+        <text x="636" y="300" class="mono" text-anchor="middle" style="fill:#87867F">fs.subscribe 实时推送</text>
+        <path class="ln-d" d="M330,126 L160,186" marker-end="url(#a4r)"/>
+        <path class="ln-d" d="M380,126 L380,186" marker-end="url(#a4r)"/>
+        <path class="ln" d="M430,126 L600,186" marker-end="url(#a4)"/>
+      </svg>
+      <figcaption><b>三类工具后端在 agent 看来是统一的工具调用，但审批路径不同</b>：服务端工具与浏览器任务走 sentinel 出网审批；节点工具走本机 HITL 审批；两者都落在 egress/approvals 的决策枚举上。</figcaption>
+    </figure>
+
+    <ol class="trace">
+      <li><div class="tr-head"><span class="tr-stage">入口</span><b>触发源不止用户消息</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p>浏览器任务的 <code>owner_kind</code> 枚举为 <code>user | main_agent | cron</code>，说明同一套任务既可由用户发起、由主代理自主发起，也可由定时任务发起。定时任务用 job_id 标识，<code>tasks.run</code> 可手动触发一次，<code>tasks.runs</code> 列出运行记录；文案里称 "Cron automation"，出网作用域里有 "Chat + Crons + Artifacts" 三类。渠道（WhatsApp / Messenger / Telegram companion）与 peer 投递（<code>peers.inbox.deliver</code>）也是入口。</p></div></li>
+      <li><div class="tr-head"><span class="tr-stage">模型与技能</span><b>每轮前可切模型，技能可禁用</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p><code>model.set {model}</code> 返回 <code>selected_model</code> 与 <code>generation</code>，客户端丢弃过期 generation 的响应；界面是否显示模型身份由 <code>modelIdentityVisibility</code> 控制，另有开关 <code>hatch_big_boy_models</code>。<span class="warn">模型名称在静态包里被抹掉，只剩选择机制。</span>技能（<code>skills.list</code>）带 entryPoint、authType、OAuth 流程，可 <code>set_disabled</code>；自定义连接器 <code>custom_connectors.register</code> 另成一类。</p></div></li>
+      <li><div class="tr-head"><span class="tr-stage">推理</span><b>主代理与子代理分 lane 输出</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p>lane 枚举：main、subagent、critical、normal。子代理产出标 <code>isBackground</code>，界面上有 "Subagent reasoning" 折叠区。五个协作人设模板（Strategist / Researcher / Builder / Critic / Synthesizer）是现成的多角色分工脚本，<span class="warn">推断</span>用于共享 agent 或 "flock" 场景（路由里有 <code>hatch.flock</code>）。</p></div></li>
+      <li><div class="tr-head"><span class="tr-stage">工具</span><b>按工具类型路由到三种后端</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p>服务端：<code>tool.exec</code>（审批图标为地球，推断为带网络的执行环境）、<code>tool.web_fetch</code>、<code>tool.imagine</code>、<code>tool.zeitgeist</code>（文档搜索类）。VM 浏览器：<code>browser.lease</code> 租用，<code>browser_task.*</code> 管理生命周期（heartbeat、present、takeover、refresh_environment、clipboard）。节点：<code>nodes.sync</code> 同步能力，<code>nodes.invoke_ack</code> / <code>invoke_result</code> 回执；web 客户端注册 <code>device_commands</code> 与 <code>hatch_app_commands</code> 后同样可被调用。</p>
+        <p class="tr-block"><b>接管：</b><code>control_owner</code> 可在 agent 与 user 间切换，用户可随时 <code>browser_task.takeover</code> 接管 VM 浏览器，再交还。</p></div></li>
+      <li class="human"><div class="tr-head"><span class="tr-stage">审批</span><b>需要授权时暂停，等人决定</b><span class="tr-flag">人 ①</span></div>
+        <div class="tr-body"><p>决策枚举：allow_once / allow_always / allow_session / deny / deny_always / ask / never / auto_allow。审批对象覆盖连接器动作、文件系统读写、电脑控制、单个工件、单个想法、Feed、单个定时任务的 web 访问。详见第 06 节。</p></div></li>
+      <li><div class="tr-head"><span class="tr-stage">压缩</span><b>轮次之间做上下文压缩并通知界面</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p><code>delta.compaction_start</code> / <code>compaction_done</code> 携带 phase 与 reason；带 compaction 的消息在界面上作为分隔，不可反应。<span class="warn">推断</span>：压缩结果与记忆系统相关（"Summarize into memory" 是显式动作，自动压缩是否写记忆未知）。</p></div></li>
+      <li><div class="tr-head"><span class="tr-stage">收尾</span><b>turn_done 后更新活动、目标与通知</b><span class="tr-flag auto">全自动</span></div>
+        <div class="tr-body"><p><code>activity.*</code> 记录动作并可按目标过滤；<code>goals.suggestions.decide</code> 让用户接受或拒绝 agent 对目标的建议；<code>notifications.foreground/background/border</code> 区分提醒方式；<code>chat.unread_count</code> 更新角标。</p></div></li>
+    </ol>
+  </section>
+
+  <div class="bridge"><b>运行时的每一步都可能被拦下来。</b><span class="to">↓　拦截点在哪里，规则怎么存？</span></div>
+
+  <section id="sec-approval">
+    <h2><span class="n">06</span>审批与出网管控</h2>
+    <p class="sub">两套机制叠加：面向动作的 <strong>HITL 审批</strong>，和面向网络的 <strong>sentinel</strong> 服务。</p>
+    <div class="g2">
+      <div class="card">
+        <h3>HITL 审批</h3><div class="tag">approvals.* · 决策与作用域</div>
+        <ul class="rkv">
+          <li><b>决策</b>：allow_once / allow_always / allow_session / deny / deny_always / ask / never / auto_allow；另有 accepted / dismissed 作为卡片状态。</li>
+          <li><b>作用域</b>（文案）：单个连接器动作、连接器写权限整体、文件系统读 / 写、电脑控制（对整台 Mac）、单个工件、单个想法、Feed、单个定时任务。</li>
+          <li><b>持久性</b>："Always allow has no time limit"；改变连接器写权限会清空已保存的动作审批。</li>
+          <li><b>可编辑</b>：<code>egress.approval.editable_message</code> / <code>edit_message</code> 允许用户修改 agent 将要发出的内容再批准。</li>
+          <li><b>历史</b>：<code>approvals.history</code>、<code>approvals.snapshot</code>；本机侧超时未答不重试。</li>
+          <li><b>内部开关</b>：<code>EndoNodeAllowAllHITLGating</code>、<code>is_tool_mocking_enabled_for_hatch</code>、redteam mocks，<span class="warn">发布版是否可达未知</span>。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>sentinel 出网</h3><div class="tag">service: sentinel · /permissions/*</div>
+        <ul class="rkv">
+          <li><b>透明代理</b>：<code>permissions/tproxy</code>、<code>permissions/mitm</code>、<code>permissions/sni-rejection</code>、<code>permissions/network-rules</code>，即 VM 出站流量被透明代理，可做 TLS 中间人与按 SNI 拒绝。</li>
+          <li><b>作用域权限</b>：<code>/permissions/scopes/{scope_type}/{scope_id}</code>，按连接器 <code>/permissions/connectors/{connector}</code> 单独设置并可重置。</li>
+          <li><b>HITL 节流</b>：<code>permissions/hitl</code> 与 snooze 删除；"residential egress override" 让浏览器任务在未获住宅出口授权时失败。</li>
+          <li><b>审批流</b>：<code>/approvals</code> 列表 → <code>decide</code>；文案 "{assistant} wants to share information with {domain} for {scheduledTask}" 说明按域名 + 任务粒度审批。</li>
+          <li><b>revoke / reset</b>：一键撤销或重置全部出网权限。</li>
+        </ul>
+      </div>
+    </div>
+    <blockquote class="raw"><b>设计意图推断：</b>把"agent 想访问哪个域名、为了哪个任务"做成和"agent 想删哪个文件"同级的审批对象，是这套系统把<b>网络副作用</b>纳入 HITL 的方式；MITM 能力意味着 sentinel 可以看到明文请求，这既是审计基础也是隐私边界。</blockquote>
+  </section>
+
+  <div class="bridge"><b>动作和网络都管住了。</b><span class="to">↓　agent 产出的东西放在哪里，用户的文件又怎么进来？</span></div>
+
+  <section id="sec-fs">
+    <h2><span class="n">07</span>文件系统与文件管理</h2>
+    <p class="sub">两套文件系统、一套版本化、一个导出通道。VM 家目录就是 agent 的"硬盘"。</p>
+    <figure>
+      <div class="fig-h">图 5 · VM 文件系统布局与两套文件 API<span>左：Mac（经节点）· 右：VM（经网关）</span></div>
+      <svg class="rf" viewBox="0 0 760 300" role="img" aria-label="文件系统布局">
+        <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <rect class="box-d" x="14" y="14" width="220" height="270" rx="10"/>
+        <text x="124" y="38" text-anchor="middle" style="fill:#141413;font-weight:600">Mac 文件（files.*）</text>
+        <text x="124" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">经原生节点执行，需 TCC + 审批</text>
+        <text x="124" y="80" class="tiny" text-anchor="middle" style="fill:#3D3D3A">read · write · edit · copy</text>
+        <text x="124" y="96" class="tiny" text-anchor="middle" style="fill:#3D3D3A">list · search · mkdir · rename</text>
+        <text x="124" y="112" class="tiny" text-anchor="middle" style="fill:#3D3D3A">trash · delete · tags · subscribe</text>
+        <text x="124" y="132" class="tiny" text-anchor="middle" style="fill:#3D3D3A">专属 Hatch folder + 授权目录</text>
+        <text x="124" y="148" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Blocked folders 永久拒绝</text>
+        <text x="124" y="164" class="tiny" text-anchor="middle" style="fill:#3D3D3A">凭据 / 连接器数据 / 废纸篓拒绝</text>
+        <text x="124" y="190" class="tiny" text-anchor="middle" style="fill:#3D3D3A">files.upload ≤50 MB → VM uploads/</text>
+        <text x="124" y="206" class="tiny" text-anchor="middle" style="fill:#3D3D3A">files.dialog.save：从 VM 存回 Mac</text>
+        <text x="124" y="232" class="mono" text-anchor="middle" style="fill:#87867F">LSP 协议 workspace/*</text>
+        <text x="124" y="248" class="tiny" text-anchor="middle" style="fill:#87867F">（web 包内置语言服务客户端，</text>
+        <text x="124" y="262" class="tiny" text-anchor="middle" style="fill:#87867F">用于工件 / 代码编辑）</text>
+        <path class="ln" d="M236,150 L286,150" marker-end="url(#a5)"/>
+        <path class="ln" d="M288,165 L238,165" marker-end="url(#a5)"/>
+        <rect class="box-ok" x="290" y="14" width="456" height="270" rx="10"/>
+        <text x="518" y="38" text-anchor="middle" style="fill:#141413;font-weight:600">VM 文件系统（fs.* · /fs/…）</text>
+        <text x="306" y="64" class="mono" style="fill:#3D3D3A">/home/hatch/</text>
+        <text x="320" y="82" class="mono" style="fill:#3D3D3A">├ workspace/</text>
+        <text x="334" y="100" class="mono" style="fill:#3D3D3A">│  ├ your_files/        ← 用户文件区（Library · files）</text>
+        <text x="334" y="116" class="mono" style="fill:#3D3D3A">│  ├ artifacts/         ← 工件文件夹 + 媒体</text>
+        <text x="334" y="132" class="mono" style="fill:#3D3D3A">│  ├ podcasts/          ← 生成的播客</text>
+        <text x="334" y="148" class="mono" style="fill:#3D3D3A">│  ├ avatars/</text>
+        <text x="334" y="164" class="mono" style="fill:#3D3D3A">│  └ conversations/{id}/transcript</text>
+        <text x="320" y="182" class="mono" style="fill:#3D3D3A">├ uploads/              ← files.upload 落点</text>
+        <text x="320" y="198" class="mono" style="fill:#3D3D3A">├ MEMORY.md             ← 根记忆文件</text>
+        <text x="320" y="214" class="mono" style="fill:#3D3D3A">└ media/raw/            ← 原始媒体</text>
+        <text x="306" y="240" class="tiny" style="fill:#3D3D3A">API：stats · list · stat · read/reads · write · delete · rename · mkdir · search</text>
+        <text x="306" y="256" class="tiny" style="fill:#3D3D3A">library（按 preset 取视图）· export（pdf）· raw/{*path}（media 通道）· thumbnail</text>
+        <text x="306" y="272" class="tiny" style="fill:#3D3D3A">subscribe（fs.updated）· git.log / show_file · vault.luks_status · dyi.export</text>
+      </svg>
+      <figcaption><b>路径布局来自 web 包中的字符串常量，层级为推断</b>（例如 uploads/ 相对 "VM home" 的位置来自工具描述）。关键事实是：工件、播客、转录、记忆都是普通文件，因此资料库可以用同一个 <code>fs.library</code> 接口按 preset 取出。</figcaption>
+    </figure>
+    <div class="card">
+      <table>
+        <tr><th style="width:22%">能力</th><th style="width:36%">接口</th><th>说明</th></tr>
+        <tr><td>读文件</td><td><code>fs.read</code> / <code>fs.reads</code>（批量）· <code>fs.raw/{*path}</code></td><td>raw 走 media 通道、无响应大小上限，用于图片视频直出；thumbnail 单独接口。</td></tr>
+        <tr><td>写文件</td><td><code>fs.write</code> · <code>files.create_file</code> · <code>files.save</code></td><td>peers 的 <code>discretion.write</code> 复用 /fs/write，说明 peer 相关状态也以文件存放。</td></tr>
+        <tr><td>实时性</td><td><code>fs.subscribe</code> → <code>fs.updated</code>、<code>files.updated</code>、<code>library.fs_event</code></td><td>资料库与文件查看器按事件增量刷新，不轮询。</td></tr>
+        <tr><td>版本化</td><td><code>git.log</code> · <code>git.show_file</code></td><td>工作区有 git 历史，可回看某文件某版本；<span class="warn">是否自动提交未知</span>。</td></tr>
+        <tr><td>导出</td><td><code>fs.export {path, format:pdf}</code> · <code>document.pdf</code> · <code>dyi.export</code></td><td>单文件导 PDF；dyi（Download Your Information）整体导出。</td></tr>
+        <tr><td>加密盘</td><td><code>vault.luks_status</code>（/luks/status）</td><td>机密 VM 的数据盘用 LUKS 加密，PIN 对应解锁。</td></tr>
+        <tr><td>运维入口</td><td><code>ssh.operator.enable/disable</code> · <code>/hatch/ssh-access/tokens</code></td><td>可为"operator"开启 SSH；<span class="warn">operator 是用户还是 Meta 支持人员，静态不可判</span>。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>文件管理的设计重心不在"管理"而在<b>"让所有产出都是文件"</b>，这样搜索、分享、导出、版本回溯都能用同一套 fs 接口完成。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>文件系统是底座。</b><span class="to">↓　资料库就是它的几种视图，加上工件和 Spaces 这两种"活"的文件。</span></div>
+
+  <section id="sec-lib">
+    <h2><span class="n">08</span>资料库与工件</h2>
+    <p class="sub">资料库路由 <code>/library/*</code> 共八个分区；数据全部来自 <code>fs.library {preset, limit, offset}</code> 的分页查询，所以它是文件系统上的<strong>视图而非独立存储</strong>。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:16%">分区</th><th style="width:28%">路由 / 数据源</th><th>内容与能力</th></tr>
+        <tr><td>Recent</td><td><code>/library/recent</code> · <code>library.sidebar.root</code></td><td>最近项目；<code>navigation.recents.touch</code> 记录访问。</td></tr>
+        <tr><td>Artifacts</td><td><code>/library/artifacts</code> · <code>fs.library preset=artifacts</code> · <code>artifacts.*</code></td><td>agent 生成的可交互产物。list / pin / share / remove / fetch_url / snapshot / subscribe；"Web artifacts" 子类；删除会移除整个工件文件夹及其媒体；分享生成公开链接，部分 VM 不支持。</td></tr>
+        <tr><td>Documents</td><td><code>/library/documents</code></td><td>文档类工件；可导出 PDF（<code>document.pdf</code>）；原生包里带 <code>markdown-editor.html</code> 编辑器。</td></tr>
+        <tr><td>Files</td><td><code>/library/files</code> · <code>fs.list</code> 文件浏览器</td><td>对应 workspace/your_files；支持 <code>files.dialog.save</code> 存回 Mac。</td></tr>
+        <tr><td>Media</td><td><code>/library/media</code> · <code>fs.library preset=media</code></td><td>照片与视频，走 raw/thumbnail 通道；<code>library.media.previews</code>。</td></tr>
+        <tr><td>Podcasts</td><td><code>/library/podcasts</code> · <code>podcasts.*</code></td><td>agent 生成的个人播客："Create a podcast"、发布到 RSS 订阅源（公开链接，可加到 Apple Podcasts）。</td></tr>
+        <tr><td>Slides</td><td><code>hatch.library.slides</code> · <code>artifacts.slides.rebuild</code></td><td>幻灯片工件，可重建为 pptx（180 秒超时）并在内置查看器播放。</td></tr>
+        <tr><td>Spaces</td><td><code>hatch.library.spaces</code> · <code>/spaces/v2</code> · saved_space</td><td>见下卡。</td></tr>
+      </table>
+      <div class="delta"><b>小结：</b>Artifacts 是"静态产物"，Spaces 是"带服务端逻辑的产物"，Podcasts 是"定期生成的产物"，三者都落在同一棵文件树上。</div>
+    </div>
+    <div class="g2" style="margin-top:16px">
+      <div class="card">
+        <h3>Spaces 的实现形态</h3><div class="tag">/spaces/v2/{slug} · /spaces/cvm/{slug}/…</div>
+        <p>一个 Space 由 slug 标识，可 <code>save</code>（存为 saved_space）、<code>delete</code>、<code>export_html</code>（导出单文件 HTML）。渲染走 <code>spaces.cvm.render</code>（GET 根路径）与 <code>spaces.cvm.get / post {*subpath}</code>，即 <strong>Space 的页面和后端请求都由 VM 内进程响应</strong>。</p>
+        <p>调试接口 <code>debug/summary · invocations · invocations/{id} · log</code> 表明每次请求是一次"invocation"，有日志可查。分享有独立审核流：<code>share/review</code> → <code>share</code> → <code>settings</code> / <code>fix</code>，并可 <code>unshare</code>；文案里有 Cloudflare 共享帧 URL（<code>cloudflare-shared-space-frame-url</code>），推断公开分享经 Cloudflare 托管。</p>
+        <p>原生侧 <code>EndoSpaceWebView</code> 以独立 scheme 加载，阻止无用户手势的外部打开；Space 可请求 Mac 文件（"A Space wants to use files from your Mac"）。</p>
+      </div>
+      <div class="card">
+        <h3>工件的生命周期</h3><div class="tag">artifact.build_thread · artifact.use · hatch.artifact.*</div>
+        <p>路由追踪里有 <code>hatch.artifact.load</code>、<code>artifact.runtime_signal</code>、<code>artifact.rewrite</code>，说明工件有加载、运行时信号与改写三个阶段；<code>artifacts.subscribe</code> 推送变更。</p>
+        <p>在共享 agent 的能力授权里，<code>artifact.use</code> 对应 "Use shared apps"，<code>artifact.build_thread</code> 对应 "Build apps together"，即工件可以被另一个 agent 使用或与之协作构建。</p>
+        <p>web 包内置 LSP 客户端（<code>workspace/*</code> 方法、诊断、语义着色），<span class="warn">推断</span>用于在工件编辑器里提供代码智能。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>产物有了去处。</b><span class="to">↓　agent 记住的东西放在哪？</span></div>
+
+  <section id="sec-mem">
+    <h2><span class="n">09</span>记忆系统</h2>
+    <p class="sub">记忆不是向量库黑盒，而是<strong>用户可直接打开、编辑、搜索的 Markdown 文件</strong>，外加一组维护接口。</p>
+    <div class="g3">
+      <div class="card"><h3>形态</h3><div class="tag">/MEMORY.md + 记忆条目路径</div><p>Activity/Status 面板上有一张 "MEMORY · ACCESS WITH CARE" 文件卡，点击打开 <code>/MEMORY.md</code>；<code>ui.navigate.memory.item {path}</code> 打开某个记忆路径，说明除根文件外还有按路径组织的条目（"Memory entry"）。</p></div>
+      <div class="card"><h3>读写</h3><div class="tag">memory.* 四个接口 + 三个显式动作</div><p><code>memory.search</code>、<code>memory.get</code>、<code>memory.consolidate</code>（合并）、<code>memory.reindex</code>（重建索引）。界面动作："Add memory"、"Import memory"、"Summarize into memory"（把当前对话总结进记忆）。</p></div>
+      <div class="card"><h3>边界</h3><div class="tag">共享与隔离</div><p>向共享 agent 共享记忆要逐条挑选（"Choose specific memories to share"），对应能力 <code>memory.query</code>（"Look up memories"）。重置 VM 会永久删除记忆；机密 VM 下记忆落在 LUKS 加密盘。</p></div>
+    </div>
+    <blockquote class="raw"><b>与压缩的关系（推断）：</b>上下文压缩（compaction）和记忆写入是两条线：前者是服务端自动的、按轮次的；后者有显式的"总结进记忆"动作。reindex 的存在说明搜索基于某种索引（可能是向量或全文），但索引本身不是真相源，文件才是。</blockquote>
+  </section>
+
+  <div class="bridge"><b>一个人的 agent 讲完了。</b><span class="to">↓　它如何被拆出一部分给别人，或和别人的 agent 对话？</span></div>
+
+  <section id="sec-share">
+    <h2><span class="n">10</span>共享 Agent 与 Peers</h2>
+    <p class="sub">两种"多人"设计：把自己 agent 的一个作用域版本给别人（Shared Agent），或让两个人的 agent 互相投递（Peers）。</p>
+    <div class="g2">
+      <div class="card">
+        <h3>Shared Agent</h3><div class="tag">shared_agents.* · 定义页 · 私有侧聊</div>
+        <ul class="rkv">
+          <li><b>定义</b>："A Shared Agent is a scoped version of your assistant with its own private side chat"。创建时不带任何私有内容，之后在定义页逐项加入：对话上下文（主聊有界副本或指定线程）、知识（文件、工件、记忆）、目标、Spaces、连接器 / 技能 / 凭据<strong>描述符</strong>（"Raw secret values are never included"）。</li>
+          <li><b>身份</b>：名称、角色、头像、强调色、指令（<code>identity.update</code> 与 <code>definition.update</code> 分开）。</li>
+          <li><b>能力授权</b>：chat.send、chat.read_history、artifact.use、file.read、file.share、memory.query、artifact.build_thread、cron.create、cron.list、tool.execute，各有人话标签。</li>
+          <li><b>分享</b>：<code>shares.create / list / revoke</code>，每个分享有自己的对话（<code>shares/{id}/conversation</code>）；接收方通过 <code>/hatch/shared-agents/claim</code> 领取，再用 <code>remote.open / remote.send</code> 与之对话（connectionClass 为 shared_agent）。</li>
+          <li><b>侧聊</b>：创建即生成一个 owner-only 侧聊，"automatically includes its current-epoch recent messages"。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Peers（可信网络）</h3><div class="tag">peers.* · SAS 验证 · 收件箱</div>
+        <ul class="rkv">
+          <li><b>建立关系</b>：<code>invites.create / open / accept / revoke</code>，落地页 <code>/peer/accept</code>；请求阶段有 <code>requests.sas</code> 与 <code>sas.confirm</code>，即<strong>短认证串（SAS）人工比对</strong>，典型的端到端密钥验证做法。</li>
+          <li><b>关系版本</b>：断开要带 relationship_generation_id / revision / started_at，说明关系有代际与修订号，防止旧状态回放。</li>
+          <li><b>投递</b>：<code>inbox.deliver / list / decline</code>，peer 的消息进入收件箱，由本人 agent 决定如何处理；<code>reset_conversation</code> 可清空与某 peer 的对话。</li>
+          <li><b>可见性</b>：<code>peers.update</code>、<code>discretion.write</code>（复用 fs.write）控制向对方披露什么；头像照片按 sha256 取。</li>
+          <li><b>来源</b>：<code>/hatch/trusted-network/contacts</code> 从联系人里找可邀请的人。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>渠道与多角色</h3><div class="tag">channels.* · 五个人设模板</div>
+      <p><code>channels.link / status / unlink</code> 与 WhatsApp / Messenger / Telegram companion（<code>whatsapp_companion.link</code>、<code>messenger_companion.unlock</code>）把 IM 变成和自己 agent 对话的入口。五个人设模板（Strategist、Researcher、Builder、Critic、Synthesizer）各自一句定位，<span class="warn">推断</span>用于让多个 agent 实例围绕一个议题分工讨论（路由里的 <code>hatch.flock</code> 可能是其载体）。</p>
+    </div>
+  </section>
+
+  <div class="bridge"><b>设计轮廓完整了。</b><span class="to">↓　哪些是看到的，哪些是猜的，下一步怎么验证。</span></div>
+
+  <section id="sec-gap">
+    <h2><span class="n">11</span>待验证与边界</h2>
+    <p class="sub">本篇证据几乎全部来自 web 客户端：路由表、事件名、字段名和界面文案。它们可靠地说明"存在什么"，但对"怎么实现"只能推断。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:4%">#</th><th style="width:26%">待验证点</th><th style="width:34%">当前依据</th><th>验证方法</th></tr>
+        <tr><td>1</td><td>侧聊创建参数与"从消息分支"是否存在</td><td>有 <code>session.start</code> 路由与草稿线程，未抓到调用点参数；branch/fork 关键字多但未定位</td><td>REA <code>analyze_javascript_application</code> 追 <code>session.start</code> 调用链；运行时抓 /session/start 请求体</td></tr>
+        <tr><td>2</td><td>compaction 的触发条件与是否写记忆</td><td>只有事件名、phase、reason 字段</td><td>运行时观察长对话中的 compaction 事件；对比 /MEMORY.md 变化</td></tr>
+        <tr><td>3</td><td>子代理的派生与回收</td><td><code>subagents.list/status</code>、lane=subagent、五个人设</td><td>观察 subagents/status 响应；检查 flock 路由的 UI</td></tr>
+        <tr><td>4</td><td>tool.exec 的执行环境</td><td>审批图标为地球；"programs it runs"</td><td>在 VM 内（需 SSH 或 Space 调试日志）查看执行沙箱</td></tr>
+        <tr><td>5</td><td>记忆索引类型（向量 / 全文）</td><td>reindex 接口存在</td><td>运行时观察 memory.search 请求 / 响应形状</td></tr>
+        <tr><td>6</td><td>工作区 git 的提交策略</td><td><code>git.log</code> / <code>show_file</code></td><td>VM 内查看 .git；或观察 git.log 响应里的作者与时间间隔</td></tr>
+        <tr><td>7</td><td>sentinel MITM 的证书与范围</td><td><code>permissions/mitm</code> 可开关</td><td>VM 内查看信任链；观察 egress 审批里的域名粒度</td></tr>
+        <tr><td>8</td><td>模型清单</td><td>model.set 机制、<code>hatch_big_boy_models</code> 开关；名称被抹掉</td><td>运行时读取 /model 响应</td></tr>
+        <tr><td>9</td><td>Spaces 的服务端运行时</td><td>cvm.get/post 转发、invocation 日志</td><td>导出一个 Space 的 export.html 与 debug/log 对照</td></tr>
+      </table>
+      <div class="delta"><b>优先级建议：</b>1、2、3 直接决定"agent 怎么想"，值得先做；其中 1 和 3 可以不登录、只靠 REA 的 JavaScript 静态分析推进。</div>
+    </div>
+    <div class="note">
+      <h2>证据来源与数量</h2>
+      <ul>
+        <li><strong>网关路由</strong>：web 包内 <code>*_HTTP_ROUTE_SPECS</code> 表，218 条，68 个命名空间，带 noiseOnly / service / channel / responseType 标记。</li>
+        <li><strong>事件与字段</strong>：<code>delta.*</code> 16 种事件名；lane、phase、reason、decision、owner_kind、control_owner 等枚举。</li>
+        <li><strong>界面文案</strong>：4152 条可本地化字符串（<code>t._(…)</code>），用于还原功能语义。</li>
+        <li><strong>路径常量</strong>：<code>/home/hatch/workspace/</code>、<code>workspace/your_files</code>、<code>/MEMORY.md</code>、<code>/media/raw/</code> 等。</li>
+        <li><strong>原生侧</strong>：Swift 类型名（QuickChat、FileViewer、EndoSpaceWebView、HatchVMContentPersistence）与工具描述原文。</li>
+        <li><strong>第一篇报告</strong>：<code>muse-agent-architecture-report.html</code>；原始清单 <code>targets/Muse-10.0/FINDINGS.md</code>。</li>
+      </ul>
+    </div>
+  </section>
+  </main>
+</div>
+
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); }); }, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); const s = document.getElementById(a.dataset.sec); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.replaceState(null, '', '#' + a.dataset.sec); }));
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer'), bar = document.getElementById('annBar'), launch = document.getElementById('annLaunch'), toggle = document.getElementById('annToggle'), colorEl = document.getElementById('annColor'), sizeEl = document.getElementById('annSize');
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = []; const strokes = []; let fitting = false;
+  const fit = () => { if (fitting) return; fitting = true; layer.style.width = '0px'; layer.style.height = '0px'; const w = document.documentElement.clientWidth; const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight); layer.setAttribute('width', w); layer.setAttribute('height', h); layer.setAttribute('viewBox', `0 0 ${w} ${h}`); layer.style.width = w + 'px'; layer.style.height = h + 'px'; fitting = false; };
+  fit(); addEventListener('resize', fit); new ResizeObserver(fit).observe(document.body);
+  const setOn = v => { on = v; document.body.classList.toggle('ann-on', on); toggle.textContent = on ? '标注中' : '开启标注'; toggle.classList.toggle('on', on); };
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => { tool = b.dataset.tool; document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b)); if (!on) setOn(true); strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; }); }));
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => { const last = strokes.pop(); if (last) last.remove(); });
+  document.getElementById('annClear').addEventListener('click', () => { while (strokes.length) strokes.pop().remove(); });
+  document.getElementById('annHide').addEventListener('click', () => { setOn(false); bar.classList.add('hidden'); launch.classList.add('show'); });
+  launch.addEventListener('click', () => { bar.classList.remove('hidden'); launch.classList.remove('show'); });
+  const at = e => { const r = layer.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  layer.addEventListener('pointerdown', e => { if (!on || e.button !== 0 || tool === 'eraser') return; e.preventDefault(); layer.setPointerCapture(e.pointerId); drawing = true; pts = [at(e)]; cur = document.createElementNS(NS, 'path'); const w = +sizeEl.value; cur.setAttribute('fill', 'none'); cur.setAttribute('stroke', colorEl.value); cur.setAttribute('stroke-linecap', 'round'); cur.setAttribute('stroke-linejoin', 'round'); if (tool === 'mark') { cur.setAttribute('stroke-width', w * 3.2); cur.setAttribute('stroke-opacity', '0.32'); cur.style.mixBlendMode = 'multiply'; } else { cur.setAttribute('stroke-width', w); } cur.style.pointerEvents = 'none'; cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`); layer.appendChild(cur); });
+  layer.addEventListener('pointermove', e => { if (!drawing) return; const p = at(e), last = pts[pts.length - 1]; if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return; pts.push(p); cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`); });
+  const end = () => { if (!drawing) return; drawing = false; if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); } cur = null; };
+  layer.addEventListener('pointerup', end); layer.addEventListener('pointercancel', end);
+  layer.addEventListener('pointerover', e => { if (on && tool === 'eraser' && e.target !== layer) { const i = strokes.indexOf(e.target); if (i > -1) { strokes.splice(i, 1); e.target.remove(); } } });
+  addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key === 'Escape' && on) setOn(false); if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) { e.preventDefault(); const last = strokes.pop(); if (last) last.remove(); } });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ByClaw 稳定性演进规划：借鉴 Pi Durable · 2026-10-29</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  .shot { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--gray-150); }
+  .lead b { color: var(--slate); }
+  ul.rkv.cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+  ul.rkv.cols li:nth-last-child(2) { border-bottom: none; }
+  @media (max-width: 860px) { ul.rkv.cols { grid-template-columns: 1fr; } }
+  .case-list { display: flex; flex-direction: column; gap: 14px; }
+  .case-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 26px; align-items: center; border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px; }
+  @media (max-width: 900px) { .case-row { grid-template-columns: 1fr; } }
+  .case-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; object-fit: contain; border: 1px solid var(--gray-150); background: #fff; }
+  .logo-svg { display: inline-flex; align-items: center; justify-content: center; padding: 6px; }
+  .logo-svg svg { width: 100%; height: 100%; }
+  .case-org { font-family: var(--mono); font-size: 10.5px; color: var(--clay); margin-bottom: 2px; }
+  .case-head h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; }
+  .case-text p { font-size: 13px; line-height: 1.75; color: var(--gray-700); }
+  .case-text p b { color: var(--slate); }
+  .case-key { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--gray-150); font-size: 12px; font-weight: 600; color: var(--olive); }
+  .case-fig { display: block; width: 100%; height: auto; background: var(--ivory); border-radius: 10px; padding: 6px; }
+  .legend .chip { display: inline-block; }
+  .srcline { margin-top: 12px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); max-width: 900px; }
+  .subh { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 8px; }
+  .card p b { color: var(--slate); }
+  .mock { border: 1.5px solid var(--gray-300); border-radius: 12px; overflow: hidden; background: #fff; font-size: 12.5px; }
+  .mock-bar { display: flex; align-items: center; gap: 6px; padding: 9px 14px; background: var(--gray-150); border-bottom: 1px solid var(--gray-300); }
+  .mock-bar span { width: 9px; height: 9px; border-radius: 50%; background: var(--gray-300); }
+  .mock-bar b { margin-left: 8px; font-weight: 600; font-size: 12px; color: var(--gray-700); }
+  .mock-body { padding: 14px 16px 16px; position: relative; }
+  .mf { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .mf label { color: var(--gray-700); }
+  .mi { border: 1.2px solid var(--gray-300); border-radius: 8px; padding: 7px 10px; display: flex; align-items: center; gap: 8px; color: var(--slate); }
+  .mi i { margin-left: auto; font-style: normal; color: var(--gray-500); font-size: 10px; }
+  .mi.on { border-color: var(--clay); box-shadow: 0 0 0 3px rgba(217,119,87,0.15); font-weight: 600; }
+  .mdrop { margin: -4px 0 12px 86px; border: 1.2px solid var(--gray-300); border-radius: 10px; box-shadow: 0 8px 22px rgba(20,20,19,0.10); padding: 5px; background: #fff; }
+  .mo { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 7px; }
+  .mo b { display: block; font-weight: 600; color: var(--slate); font-size: 12.5px; }
+  .mo small { display: block; color: var(--gray-500); font-size: 11px; margin-top: 1px; }
+  .mo.sel { background: rgba(217,119,87,0.10); }
+  .mo em { margin-left: auto; font-style: normal; color: var(--rust); font-weight: 700; }
+  .ico { width: 26px; height: 26px; border-radius: 7px; background: var(--gray-150); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .mi .ico { width: 20px; height: 20px; font-size: 12px; }
+  .mtags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mtags span { background: var(--gray-150); border-radius: 6px; padding: 3px 8px; color: var(--gray-700); font-size: 11.5px; }
+  .more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 12px; font-size: 12px; }
+  .more span { font-family: var(--mono); font-size: 10.5px; color: var(--gray-500); letter-spacing: 0.04em; }
+  .more a { color: var(--gray-700); text-decoration: none; border-bottom: 1px dashed var(--gray-300); padding-bottom: 1px; }
+  .more a:hover { color: var(--rust); border-bottom-color: var(--clay); }
+  section > .more { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--gray-150); }
+  .case-text .more { margin-top: 10px; }
+  .tldr { margin-top: 14px; max-width: 830px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 980px) { .g4 { grid-template-columns: 1fr 1fr; } }
+  .goal .goal-k { font-family: var(--serif); font-size: 24px; color: var(--rust); margin-bottom: 8px; }
+  .principle { position: relative; }
+  .principle .pr-n { position: absolute; right: 18px; top: 14px; font-family: var(--serif); font-size: 26px; color: var(--oat); }
+  .principle .tag { font-family: var(--mono); }
+  .principle p + p { margin-top: 8px; }
+  .principle .map { background: rgba(120,140,93,0.10); border-radius: 8px; padding: 8px 10px; color: var(--slate); }
+  .phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 1100px) { .phases { grid-template-columns: 1fr 1fr; } }
+  .phase { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 16px 16px 14px; display: flex; flex-direction: column; }
+  .phase:first-child { border-color: var(--clay); background: rgba(217,119,87,0.04); }
+  .ph-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .ph-n { font-family: var(--mono); font-size: 10.5px; color: var(--clay); }
+  .ph-h b { font-family: var(--serif); font-weight: 500; font-size: 17px; }
+  .ph-t { width: 100%; font-size: 11px; color: var(--gray-500); }
+  .phase ul { list-style: none; flex: 1; }
+  .phase li { font-size: 12.5px; line-height: 1.65; color: var(--gray-700); padding: 5px 0 5px 14px; position: relative; }
+  .phase li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 9px; top: 8px; }
+  .ph-r { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--gray-150); font-size: 12px; font-weight: 600; color: var(--olive); }
+  table.matrix td { vertical-align: middle; }
+  table.matrix .badge { white-space: normal; line-height: 1.4; }
+  table.matrix .badge.no { background: rgba(176,74,63,0.12); border-color: var(--rust); color: var(--rust); }
+  table.matrix .badge.part { background: rgba(227,218,204,0.5); border-color: #C9B99F; color: var(--gray-700); }
+
+
+  .ladder { display: flex; flex-direction: column; gap: 8px; }
+  .lad-row { display: grid; grid-template-columns: 92px minmax(0,1fr) 230px; gap: 16px; align-items: center; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 12px 16px; }
+  .lad-row.now { background: var(--gray-150); }
+  .lad-row.cond { border-style: dashed; }
+  .lad-k b { display: block; font-family: var(--serif); font-weight: 500; font-size: 16px; }
+  .lad-k span { font-size: 11.5px; color: var(--gray-500); }
+  .lad-m p { margin-top: 7px; font-size: 12.5px; line-height: 1.6; color: var(--gray-700); }
+  .lad-g { font-size: 12px; line-height: 1.6; color: var(--gray-700); border-left: 1px solid var(--gray-150); padding-left: 14px; }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .chain i { font-style: normal; color: var(--gray-500); font-size: 11px; }
+  .ch { font-size: 11.5px; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 2px 8px; color: var(--gray-700); white-space: nowrap; }
+  .lad-row.now .ch { background: #fff; }
+  .ch.truth { background: rgba(120,140,93,0.18); border-color: var(--olive); color: var(--slate); font-weight: 600; }
+  .ch.opt { background: rgba(217,119,87,0.12); border-color: var(--clay); color: var(--rust); font-weight: 600; }
+  @media (max-width: 860px) { .lad-row { grid-template-columns: 1fr; } .lad-g { border-left: none; padding-left: 0; } }
+  .phases { grid-template-columns: repeat(3, 1fr) !important; }
+  @media (max-width: 860px) { .phases { grid-template-columns: 1fr !important; } }
+  .gate { display: block; margin-top: 6px; font-weight: 400; color: var(--gray-500); font-size: 11.5px; }
+  td code, .tr-body code { white-space: nowrap; }
+  .card p a { color: var(--rust); }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button>
+  <span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen" title="画笔">画笔</button>
+  <button class="ann-tool" data-tool="mark" title="荧光笔">荧光笔</button>
+  <button class="ann-tool" data-tool="eraser" title="橡皮擦">橡皮擦</button>
+  <span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757" title="颜色">
+  <input type="range" id="annSize" min="2" max="26" value="4" title="粗细">
+  <span class="sep"></span>
+  <button id="annUndo">撤销</button>
+  <button id="annClear">清空</button>
+  <button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch" title="展开标注工具">✎ 标注</button>
+
+<div class="sheet">
+
+
+  <aside class="sidenav">
+    <a class="doc-home" href="index.html">← 研究资料首页</a>
+    <div class="brand">
+      <div class="brand-eyebrow">规划</div>
+      <div class="brand-title">ByClaw 稳定性演进<br>借鉴 Pi Durable</div>
+      <div class="brand-sub">2026-10-29 · ByClaw D0.6.0</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#p1" data-sec="p1"><span class="num">01</span><span>目标</span></a>
+      <a href="#p2" data-sec="p2"><span class="num">02</span><span>现在的链路与问题</span></a>
+      <a href="#p3" data-sec="p3"><span class="num">03</span><span>Pi Durable 的思路</span></a>
+      <a href="#p4" data-sec="p4"><span class="num">04</span><span>逐步演进的架构</span></a>
+      <a href="#p5" data-sec="p5"><span class="num">05</span><span>一轮对话的新数据流</span></a>
+      <a href="#p6" data-sec="p6"><span class="num">06</span><span>路线与进入条件</span></a>
+      <a href="#p7" data-sec="p7"><span class="num">07</span><span>怎么验收</span></a>
+      <a href="#p8" data-sec="p8"><span class="num">08</span><span>需要定的事</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 正文连续滚动 · 右侧可圈画标注</div>
+  </aside>
+
+  <main class="main">
+
+  <header>
+    <div class="eyebrow">ByClaw · Agent 链路 · 稳定性</div>
+    <h1>让 ByClaw 的每一轮对话“不丢、不卡、不重”</h1>
+    <p class="lead">拆分完成后，对话在共享宿主里，工具在每个人的工具沙箱里。组件多了，任何一个重启、断线或重复投递，都可能让一轮对话卡住或答一半。本规划借鉴 Pi Durable 的思想，并按 DSH 最新版（0.2.2-alpha.2）的代码重新核对：DSH 已经做了很多，我们只补它缺的“进度”这一层，逐步演进。</p>
+    <div class="tldr"><b>结论</b>：不换 Harness，也不另建一份内容存储。DSH 的会话日志已经记下“说了什么、做了什么”，也能在恢复时收尾；它缺的是“重启后谁来接着做”。所以账本 = DSH 日志 + 我们补的进度记录。先止血，再升级 DSH，再补进度和启动续跑；同时补宿主承载能力。多宿主和独立流服务等真实需求出现再做。</div>
+  </header>
+
+  <section id="p1">
+    <h2><span class="n">01</span>目标：稳定是什么意思</h2>
+    <p class="sub">对用户来说，稳定就是下面四句话。后面每一项改动都对应其中一句。</p>
+    <div class="g4">
+      <div class="card goal"><div class="goal-k">不丢</div><p>说过的话、给出的回答、做过的事，任何一个组件重启后都还在，能接着做。</p></div>
+      <div class="card goal"><div class="goal-k">不卡</div><p>每一轮对话一定有结局：完成、失败或等你回答。不会无限转圈。</p></div>
+      <div class="card goal"><div class="goal-k">不重</div><p>同一条消息、同一个回答提交几次都只算一次；有副作用的命令不会被悄悄再执行。</p></div>
+      <div class="card goal"><div class="goal-k">说得清</div><p>出了问题能告诉用户发生了什么、要不要重试；运维能查到每一步的状态。</p></div>
+    </div>
+  </section>
+
+  <section id="p2">
+    <h2><span class="n">02</span>现在的链路与问题</h2>
+    <p class="sub">一轮对话经过前端、BE、Redis、共享宿主、工具沙箱五站。问题不在某一站，而在于<b>“这一轮做到哪了”没有一个地方说了算</b>。</p>
+
+    <figure>
+      <div class="fig-h">图 1 · 今天一轮对话的路径和状态散落位置<span>红色虚线 = 只在内存或只在 Redis，重启即丢</span></div>
+      <svg class="rf" viewBox="0 0 900 300" role="img" aria-label="当前链路：前端到 BE 到 Redis 命令流到宿主再到工具沙箱，事件经 Redis 回到 BE 和前端；轮次状态分散在 Redis、宿主内存和会话文件">
+        <rect class="box-d" x="10" y="40" width="120" height="70" rx="8"/><text x="70" y="70" text-anchor="middle" style="font-weight:600">前端</text><text x="70" y="88" text-anchor="middle" class="tiny">自己记看到哪</text>
+        <line class="ln" x1="130" y1="65" x2="170" y2="65"/><line class="ln" x1="170" y1="88" x2="130" y2="88"/>
+        <rect class="box-d" x="170" y="30" width="150" height="90" rx="8"/><text x="245" y="56" text-anchor="middle" style="font-weight:600">BE</text><text x="245" y="76" text-anchor="middle" class="lab">用户消息入库</text><text x="245" y="94" text-anchor="middle" class="lab">收到“结束事件”才存回答</text>
+        <line class="ln" x1="320" y1="60" x2="370" y2="60"/><line class="ln" x1="370" y1="92" x2="320" y2="92"/>
+        <rect class="box-x" x="370" y="22" width="170" height="106" rx="8" style="stroke-dasharray:5 4"/><text x="455" y="46" text-anchor="middle" style="font-weight:600">Redis</text><text x="455" y="66" text-anchor="middle" class="lab">命令流（待确认列表）</text><text x="455" y="84" text-anchor="middle" class="lab">事件流 · 进行中快照</text><text x="455" y="102" text-anchor="middle" class="lab">“运行中”标记 · 提问状态</text>
+        <line class="ln" x1="540" y1="60" x2="590" y2="60"/><line class="ln" x1="590" y1="92" x2="540" y2="92"/>
+        <rect class="box-ok" x="590" y="16" width="170" height="118" rx="8"/><text x="675" y="40" text-anchor="middle" style="font-weight:600">共享宿主 · 用户上下文</text>
+        <rect class="box" x="604" y="52" width="142" height="34" rx="6" style="stroke:#B04A3F;stroke-dasharray:5 4"/><text x="675" y="73" text-anchor="middle" class="lab">本轮状态 · 闸门 · 待答提问</text>
+        <rect class="box" x="604" y="92" width="142" height="32" rx="6"/><text x="675" y="112" text-anchor="middle" class="lab">模型调用</text>
+        <line class="ln" x1="760" y1="75" x2="800" y2="75"/><text x="780" y="68" text-anchor="middle" class="tiny">SSH</text>
+        <rect class="box-x" x="800" y="40" width="90" height="70" rx="8"/><text x="845" y="68" text-anchor="middle" style="font-weight:600">工具沙箱</text><text x="845" y="86" text-anchor="middle" class="tiny">进程 · /tmp</text>
+        <line class="ln" x1="675" y1="134" x2="675" y2="170"/>
+        <rect class="box-d" x="590" y="170" width="170" height="50" rx="8"/><text x="675" y="192" text-anchor="middle" class="lab">会话文件（共享存储）</text><text x="675" y="208" text-anchor="middle" class="tiny">模型与工具历史，BE/前端不读</text>
+        <rect class="box-d" x="170" y="170" width="150" height="50" rx="8"/><text x="245" y="192" text-anchor="middle" class="lab">BE 数据库</text><text x="245" y="208" text-anchor="middle" class="tiny">只有开头和结尾</text>
+        <line class="ln" x1="245" y1="120" x2="245" y2="170"/>
+        <text x="450" y="262" text-anchor="middle" class="lab">轮次状态分在 Redis、宿主内存、会话文件三处，没有一处完整；重启后彼此对不上，也没有对账</text>
+      </svg>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:4%">#</th><th style="width:28%">问题</th><th>根因</th><th style="width:12%">违反</th></tr>
+        <tr><td>1</td><td>宿主重启时，进行中的一轮永久挂起</td><td>命令留在待确认列表，新进程沿用同名 worker，又跳过“自己的”待确认命令；DSH 的恢复只在有人打开会话时发生，而且只收尾不续跑，启动时没有人去扫描；BE 对一轮没有超时</td><td>不丢 · 不卡</td></tr>
+        <tr><td>2</td><td>同一个提问的回答重复提交，这一轮可能被提前结束</td><td>“等你回答”不是持久的等待；多余的恢复命令失败后发出结束事件，BE 见到结束事件就收尾</td><td>不重 · 不丢</td></tr>
+        <tr><td>3</td><td>委派、团队任务卡住时一直转圈</td><td>闸门只有“5 分钟提醒一下”，没有失败出口</td><td>不卡</td></tr>
+        <tr><td>4</td><td>Redis 出问题就丢在途的回答，事件写失败被静默吞掉</td><td>Redis 既当通道又当事实来源</td><td>不丢 · 说得清</td></tr>
+        <tr><td>5</td><td>沙箱丢了，正在跑的命令没有明确交代</td><td>DSH 已在执行前落盘工具调用，恢复时能告诉模型“结果未知”，但进程内丢失沙箱和重启后的处理没有串起来；SSH 命令没有幂等键</td><td>说得清 · 不重</td></tr>
+        <tr><td>6</td><td>同一帧重复到达 BE 会被当成新消息</td><td>trace id 在 BE 收到后才生成，入口没有按前端已有的 clientRequestId 去重。现在前端不自动重发，风险不高，加自动重发前必须解决</td><td>不重</td></tr>
+        <tr><td>7</td><td>前端断线重连靠快照替换加自己去重</td><td>服务端没有“从第 N 条继续”。DSH 自己的客户端也是重连后重取快照，所以这不是急需解决的问题</td><td>不重</td></tr>
+        <tr><td>8</td><td>宿主正常停机时，排队的消息可能被清空（读代码推断）</td><td>DSH 优雅停机走取消流程，会清掉排队输入；进程被直接杀死反而保留</td><td>不丢</td></tr>
+        <tr><td>9</td><td>共享存储挂住时，可能拖住整台宿主（读代码推断）</td><td>写日志的 fsync 没有超时，一个用户的存储卡住可能占满公共线程池，影响同宿主的所有人</td><td>不卡</td></tr>
+        <tr><td>10</td><td>后台任务在这一轮结束后才完成，输出可能到不了用户（读代码推断）</td><td>任务结束会开启新一轮，但 BE 的这一轮已经收尾；任务本身也没有时限，挂死时一直占着沙箱</td><td>不丢 · 不卡</td></tr>
+        <tr><td>11</td><td>超长工具结果可能读不到（读代码推断）</td><td>结果写在宿主的临时目录，模型却用走工具沙箱的 read 去读</td><td>不丢</td></tr>
+        <tr><td>12</td><td>一个用户可能拖累同宿主的其他人</td><td>共享宿主没有全局并发控制，DSH 也没有</td><td>不卡</td></tr>
+      </table>
+      <div class="delta">已经做得好的部分演进时要保住：BE 重启后的接管与快照重建、最终事件的去重、宿主重启后提问的冷恢复、worker 重新拉起。</div>
+    </div>
+  </section>
+
+  <section id="p3">
+    <h2><span class="n">03</span>Pi Durable 给我们的思路</h2>
+    <p class="sub">Pi Durable 是 Pi 编程助手团队开源的“持久 Agent 运行库”（npm 1.4.0，仍标 Experimental）。它要解决的正是上面这类问题：进程随时会死，Agent 要能接着干。我们不搬它的代码，借它的四条契约。</p>
+
+    <div class="g2">
+      <div class="card principle"><div class="pr-n">①</div><h3>先落盘，再可见</h3><div class="tag">“Only committed state is observable.”</div><p>所有变化走一条原子提交线：用户输入、模型回答、任务状态、业务数据在一次提交里落盘，落盘之后才推给任何人看。界面只渲染已提交的状态，不靠拼事件。</p><p class="map">→ ByClaw：实时文字可以先显示（DSH 也如此），但结局要等落盘后才算数；Redis 只当通道。</p></div>
+      <div class="card principle"><div class="pr-n">②</div><h3>先记意图，再动手</h3><div class="tag">提交意图 → 执行 → 提交结果</div><p>工具执行前先提交“要做什么、参数是什么、能否安全重跑”。崩溃后，只有声明“可安全重跑”的工具才重跑；其余给模型一个“被中断、可能已部分执行”的结果，由模型判断。</p><p class="map">→ ByClaw：DSH 已经做到，工具调用落盘后才执行，恢复时模型会收到“结果未知”。我们只需把它串起来。</p></div>
+      <div class="card principle"><div class="pr-n">③</div><h3>任务有状态，重启接着跑</h3><div class="tag">pending · running · waiting · sleeping · completing · terminal</div><p>一轮对话、一次模型调用、一次工具调用、一个子任务都是带检查点的任务。重启时 running 回到 pending 继续；waiting（等用户、等子任务）原样保持。反复崩溃到上限就明确失败，不无限重试。</p><p class="map">→ ByClaw：这是 DSH 缺的部分，也是我们的主要工作：启动时找到没做完的轮次，新起一次尝试并附上恢复说明，或明确失败；每轮一定有结局。</p></div>
+      <div class="card principle"><div class="pr-n">④</div><h3>一份账本只有一个主人</h3><div class="tag">“One process owns a storage at a time.”</div><p>同一份存储同一时间只由一个进程打开，别的客户端连到这个进程。它不提供锁和接管，这部分要应用自己做。</p><p class="map">→ ByClaw：单宿主时 DSH 的文件锁够用；多宿主要自己做带纪元号的租约，因为文件锁在 NFS 上不可靠，也没有 fencing。</p></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="fig-h">Pi Durable 的契约，DSH 最新版做到了多少<span>核对 0.2.2-alpha.2 源码</span></div>
+      <table class="matrix">
+        <tr><th style="width:22%">契约</th><th style="width:11%">DSH</th><th style="width:33%">DSH 现在的情况</th><th>ByClaw 要补什么</th></tr>
+        <tr><td>先落盘再可见</td><td><span class="badge part">部分</span></td><td>事件先进内存就对外可见，约 200 毫秒一批写盘并 fsync；用户输入、工具调用、工具结果在关键点强制落盘</td><td>结局和最终答案要等落盘成功再发给 BE</td></tr>
+        <tr><td>先记意图再动手</td><td><span class="badge ok">有</span></td><td>工具调用落盘后才执行（顶层调用，由落盘策略插件保证）</td><td>不用补，宿主已沿用这个插件</td></tr>
+        <tr><td>恢复时的重跑策略</td><td><span class="badge no">缺</span></td><td>没有 safe/unsafe 声明；恢复时一律给模型“结果未知”或“未开始”的错误结果</td><td>先直接用这个行为，让模型判断；不做声明</td></tr>
+        <tr><td>任务状态可续跑</td><td><span class="badge no">缺</span></td><td>恢复时只补上“本轮被中断”的结尾；没有启动扫描，也不会自己继续</td><td><b>这是主要工作</b>：启动续跑器 + 进度记录 + 尝试模型 + 恢复说明</td></tr>
+        <tr><td>持久的等待</td><td><span class="badge part">部分</span></td><td>定时任务持久；提问可以迟答；待审批和后台作业都只在进程内</td><td>ask_user 继续用 ByClaw 的 Redis 状态，修好重复回答</td></tr>
+        <tr><td>输入按编号去重</td><td><span class="badge part">部分</span></td><td>Web 接口有 <code>rpcId</code>，但 ByClaw 走 <code>followup</code>，不经过它</td><td>宿主用稳定消息 ID，并自己查“已落盘日志 + 队列”去重</td></tr>
+        <tr><td>归属与取消传播</td><td><span class="badge part">部分</span></td><td>进程内完善，有 <code>waitForChildren</code>；父子关系不持久</td><td>模板委派改用它；团队闸门加时限</td></tr>
+        <tr><td>反复崩溃有上限</td><td><span class="badge no">缺</span></td><td>没有</td><td>用尝试序号当计数，到上限明确失败</td></tr>
+        <tr><td>一份存储一个主人</td><td><span class="badge part">部分</span></td><td>每个会话一个 <code>flock</code> 文件锁，没有过期和 fencing；DSH 自己的文档说 NFSv3 上不可靠</td><td>多宿主时自己做租约和纪元号</td></tr>
+      </table>
+      <div class="delta">这张表的关键部分（日志落盘、恢复收尾）从 rc.2 到最新版没有变化，所以<b>升级 DSH 本身不解决稳定性</b>，但也不是前提。</div>
+    </div>
+
+    <div class="g2" style="margin-top:16px">
+      <div class="card">
+        <h3>为什么不直接换成 Pi Durable</h3>
+        <div class="tag">借契约，不搬代码</div>
+        <ul class="rkv">
+          <li><b>它自带模型循环</b>：换上等于替换 DSH，连带所有插件。</li>
+          <li><b>还是实验版本</b>：主线有未发布的破坏性改动，事件接口刚刚重做。</li>
+          <li><b>远程执行不合适</b>：它的 SSH 执行端在断线时会杀掉进程，和我们沙箱随时释放重建冲突。</li>
+          <li><b>缺几块</b>：没有工具审批、没有删除会话、没有等外部信号的原语、没有跨进程锁。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>它也明确不保证的事</h3>
+        <div class="tag">我们同样不承诺</div>
+        <ul class="rkv">
+          <li><b>外部副作用只执行一次</b>：库只给任务编号和记忆，幂等要工具自己做。</li>
+          <li><b>机器掉电不丢最后一次提交</b>：取决于存储，SQLite 默认配置下可能丢。</li>
+          <li><b>多个进程同时写一份账本</b>：明确不支持。</li>
+          <li><b>强行终止不配合的代码</b>：卡住的工具只能靠取消信号和超时。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="more"><span>延伸阅读</span><a href="byclaw-durable-ledger-v2.html">账本怎么贯穿系统 →</a><a href="superagent-infra-summary-v2.html">Super-agent 的基础设施借鉴 →</a><a href="pi-durable-research.html">站内 Pi Durable 早期调研 →</a><a href="https://earendil.com/posts/pi-durable/" target="_blank" rel="noopener">官方发布文章 ↗</a><a href="https://github.com/earendil-works/pi/tree/main/packages/durable" target="_blank" rel="noopener">源码与规格 ↗</a><a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener">DSH 源码 ↗</a></div>
+  </section>
+
+  <section id="p4">
+    <h2><span class="n">04</span>架构怎么一步步演进</h2>
+    <p class="sub">不是一次切到终态。每一步都是当时投入产出最好的形态：<b>可以单独上线，停在这里也合理，下一步不推翻上一步</b>。阶段 0 到 3 是必做的，宿主承载能力并行推进，阶段 4、5 等真实需求出现再做。每个阶段的内容和进入条件见<a href="#p6">第 06 节</a>。</p>
+
+
+    <figure>
+      <div class="fig-h">图 2 · 阶段 3 的架构<span>绿 = 事实来源 · 灰 = 通道和展示 · 橙 = 执行</span></div>
+      <svg class="rf" viewBox="0 0 900 330" role="img" aria-label="阶段 3 的架构：前端经 BE 和 Redis 连到宿主，宿主把内容和进度写进 DSH 日志，把每轮状态写进轮次索引；BE 读索引决定收尾">
+        <rect class="box-d" x="10" y="40" width="120" height="76" rx="8"/><text x="70" y="70" text-anchor="middle" style="font-weight:600">前端</text><text x="70" y="90" text-anchor="middle" class="tiny">快照 + 水位，保持不变</text>
+        <line class="ln" x1="130" y1="78" x2="170" y2="78"/>
+        <rect class="box-d" x="170" y="30" width="150" height="96" rx="8"/><text x="245" y="56" text-anchor="middle" style="font-weight:600">BE</text><text x="245" y="76" text-anchor="middle" class="lab">鉴权 · 路由 · 展示</text><text x="245" y="94" text-anchor="middle" class="lab">按索引的结局收尾</text><text x="245" y="110" text-anchor="middle" class="tiny">兜底超时</text>
+        <line class="ln" x1="320" y1="78" x2="370" y2="78"/>
+        <rect class="box-d" x="370" y="40" width="140" height="76" rx="8"/><text x="440" y="68" text-anchor="middle" style="font-weight:600">Redis</text><text x="440" y="88" text-anchor="middle" class="lab">命令和实时流</text><text x="440" y="104" text-anchor="middle" class="tiny">丢了可对账重建</text>
+        <line class="ln" x1="510" y1="78" x2="560" y2="78"/>
+        <rect class="box" x="560" y="16" width="200" height="124" rx="8"/><text x="660" y="40" text-anchor="middle" style="font-weight:600">共享宿主 · 用户上下文</text><text x="660" y="62" text-anchor="middle" class="lab">DSH 模型循环</text><text x="660" y="82" text-anchor="middle" class="lab">启动续跑器</text><text x="660" y="102" text-anchor="middle" class="lab">写日志和进度</text>
+        <line class="ln" x1="760" y1="70" x2="800" y2="70"/><text x="780" y="62" text-anchor="middle" class="tiny">SSH</text>
+        <rect class="box-x" x="800" y="34" width="92" height="72" rx="8"/><text x="846" y="66" text-anchor="middle" style="font-weight:600">工具沙箱</text><text x="846" y="84" text-anchor="middle" class="tiny">可随时重建</text>
+        <line class="ln" x1="700" y1="140" x2="730" y2="186"/>
+        <rect class="box-ok" x="600" y="186" width="290" height="96" rx="10"/><text x="745" y="210" text-anchor="middle" style="font-weight:600">DSH 会话日志（共享存储）</text><text x="745" y="232" text-anchor="middle" class="lab">内容：消息 · 回答 · 工具调用和结果</text><text x="745" y="252" text-anchor="middle" class="lab">进度：这一轮绑定哪条命令、哪个沙箱</text>
+        
+        <rect class="box-ok" x="330" y="186" width="240" height="96" rx="10"/><text x="450" y="210" text-anchor="middle" style="font-weight:600">轮次索引（BE 数据库）</text><text x="450" y="232" text-anchor="middle" class="lab">每轮一行：状态 · 结局 · 归属宿主</text><text x="450" y="252" text-anchor="middle" class="tiny">BE 消费结局事件写入</text>
+        <line class="ln-d" x1="245" y1="126" x2="245" y2="234"/><line class="ln-d" x1="245" y1="234" x2="330" y2="234"/><text x="288" y="226" text-anchor="middle" class="tiny">写入 · 查询</text>
+        <text x="450" y="314" text-anchor="middle" class="lab">日志和进度只由宿主写；索引由 BE 根据结局事件维护；请求都通过命令发给宿主</text>
+      </svg>
+    </figure>
+
+    <div class="g3">
+      <div class="card"><h3>账本分两层</h3><div class="tag">内容已有，只补进度</div><p>“说了什么、做了什么”继续在 DSH 日志里，不复制。我们补的是“做到哪了、还欠什么”：进度记录随日志一起写，BE 根据结局事件维护每轮一行的索引。<a href="byclaw-durable-ledger-v2.html">账本怎么贯穿系统 →</a></p></div>
+      <div class="card"><h3>实时文字不进账本</h3><div class="tag">快的可丢，慢的不丢</div><p>流式文字走 Redis 直接显示，半截丢了就按“开始新尝试”重新生成，所以不用写检查点，账本也不用扛这部分压力。完整回答由 DSH 落盘，结局落盘后才发出。</p></div>
+      <div class="card"><h3>为什么不是每用户一份 SQLite</h3><div class="tag">也不用完整的账本表</div><p>SQLite 的 WAL 模式不能放在网络文件系统；放宿主本地盘，宿主宕机后别人接不了。索引放 BE 已有的数据库，一轮只写几行，压力很小。</p></div>
+    </div>
+
+    <div class="g2" style="margin-top:14px">
+      <div class="card"><h3>什么时候才上独立流服务</h3><div class="tag">出现任一情况再评估 Durable Streams、NATS JetStream、S2 等</div>
+        <ul class="rkv">
+          <li><b>Redis 成为瓶颈</b>：压测或线上证明容量、连接数不够。</li>
+          <li><b>BE 负担过重</b>：按会话消费流已经影响其他业务。</li>
+          <li><b>多方读同一条流</b>：除前端外，钉钉等渠道也要按序号读取。</li>
+        </ul>
+        <p style="margin-top:8px">现在先不做按序号续读：DSH 自己的序号在崩溃后可能被复用，不能直接当游标，它的客户端也是重连后重取快照。我们保持快照 + 水位，真到这一步再由流服务提供序号。</p>
+      </div>
+      <div class="card"><h3>有两种走法不考虑</h3><div class="tag">看起来更简单，实际代价更大</div>
+        <ul class="rkv">
+          <li><b>BE 直接轮询账本取文字</b>：流式文字频率高，延迟也差。索引只用于看结局和对账。</li>
+          <li><b>前端或 BE 直连 DSH 的客户端协议</b>：宿主要直接面对外网，多宿主时要知道用户在哪台，BE 还要用 Java 重写它的多路复用逻辑；下行缓冲也没有上限，一个慢客户端可能拖累同宿主的其他用户。</li>
+        </ul>
+        <p style="margin-top:8px"><b>一人多沙箱</b>是另一条线，不依赖账本，可以按业务需要并行推进。</p>
+      </div>
+    </div>
+    <div class="more"><span>延伸阅读</span><a href="durable-streams-research.html">Durable Streams 调研 →</a><a href="nats-jetstream-research.html">NATS JetStream 调研 →</a><a href="s2-research.html">S2 调研 →</a><a href="agent-infrastructure-briefing-v2.html#a8">一人多沙箱 →</a><a href="agent-infrastructure-briefing-v2.html#a7">安全 →</a></div>
+  </section>
+
+  <section id="p5">
+    <h2><span class="n">05</span>一轮对话的新数据流</h2>
+    <p class="sub">按一轮对话的先后顺序，逐步对照今天和以后。</p>
+
+    <ol class="trace">
+      <li><div class="tr-head"><b>发出消息</b><span class="tr-stage">入口</span></div><div class="tr-body">
+        <p><b>今天</b>：BE 生成 trace id，把命令放进 Redis；宿主重启后这条命令卡住。</p>
+        <p><b>以后</b>：不新增编号。宿主用由 messageId 派生的稳定消息 ID 把消息交给 DSH，并写一条进度记录绑定这一轮；重投时先查“已落盘日志 + 队列”，已有就不多开一轮。命令等结局落盘后才确认。</p>
+        <div class="more"><span>详解</span><a href="byclaw-durable-step-ingress-v2.html">结合 ByClaw 看这一步怎么走 →</a></div></div></li>
+      <li><div class="tr-head"><b>忙时又来一条</b><span class="tr-stage">排队 · 插话</span></div><div class="tr-body">
+        <p><b>今天</b>：排队靠宿主内存里的队列。</p>
+        <p><b>以后</b>：继续用 DSH 的 followup / steer。它的排队区是持久的，进程崩溃后还在；但优雅停机可能清空它，这点要先解决。</p></div></li>
+      <li><div class="tr-head"><b>调用模型</b><span class="tr-stage">生成</span></div><div class="tr-body">
+        <p><b>今天</b>：重试时，新文字可能接在半截旧文字后面。</p>
+        <p><b>以后</b>：DSH 已有重试和尝试事件：失败的尝试落盘后发新一次。宿主把这个信号传下去，前端替换这一步未完成的文字。崩溃时半截文字不保留，由新一次尝试重新生成。</p>
+        <div class="more"><span>详解</span><a href="byclaw-durable-step-generation-v2.html">重试时前端怎么不重复 →</a></div></div></li>
+      <li><div class="tr-head"><b>执行工具</b><span class="tr-stage">先记意图</span></div><div class="tr-body">
+        <p><b>今天</b>：进程内失败和重启后的处理没有串起来。</p>
+        <p><b>以后</b>：DSH 工具调用落盘后才经 SSH 执行。宿主重启后，未完成的调用会变成“结果未知”或“未开始”交给模型，模型先检查再决定。我们把 <code>callId</code> 作为幂等键传给自己的工具，并给工具加统一超时。</p></div></li>
+      <li><div class="tr-head"><b>等用户回答</b><span class="tr-stage">持久等待</span></div><div class="tr-body">
+        <p><b>今天</b>：重复提交可能提前结束本轮。</p>
+        <p><b>以后</b>：继续用现有的 Redis 状态。重复或已消费的回答当作重复处理，不发结束事件。这里不换 DSH 的提问机制，因为它不支持委派出去的子 Agent 提问。</p></div></li>
+      <li><div class="tr-head"><b>委派与团队</b><span class="tr-stage">归属与失败出口</span></div><div class="tr-body">
+        <p><b>今天</b>：闸门只提醒，不失败；父子关系只在进程内。</p>
+        <p><b>以后</b>：模板委派改用 DSH 的 <code>waitForChildren</code>，团队闸门保留并加时限。用户停止时取消向下传播；超时以失败结束并带回已完成部分。宿主重启后，由续跑器按日志判断子任务状态（父子关系不持久，这里最难）。</p></div></li>
+      <li><div class="tr-head"><b>回到前端</b><span class="tr-stage">出口</span></div><div class="tr-body">
+        <p><b>今天</b>：BE 收到结束事件就收尾；事件写失败被静默吞掉。</p>
+        <p><b>以后</b>：实时文字经 Redis 推送。最终答案要等日志落盘成功才发出。断线重连继续用快照 + 水位；Redis 丢了，BE 向宿主要已落盘的内容重建。阶段 3 起 BE 看轮次索引的结局收尾。后台任务还在跑时，这一轮保持打开，带时限。</p></div></li>
+      <li><div class="tr-head"><b>宿主重启</b><span class="tr-stage">启动续跑</span></div><div class="tr-body">
+        <p><b>今天</b>：没人接手，一直转圈。</p>
+        <p><b>以后</b>：续跑器启动时扫描自己名下未确认的命令，打开对应会话对照日志：已完成就补发结果；在等用户就继续等；被中断就新起一次尝试，附恢复说明（先检查目录、git 和外部状态，再决定是否重复外部动作）；缺失的消息按稳定 ID 补投；尝试次数到上限直接失败。</p></div></li>
+    </ol>
+  </section>
+
+  <section id="p6">
+    <h2><span class="n">06</span>路线与进入条件</h2>
+    <p class="sub">每一阶段都能单独上线、单独验收。做完一步，看进入条件，再决定下一步。</p>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 0</span><b>止血</b><span class="ph-t">约 2–3 周 · 不改架构</span></div>
+        <ul>
+          <li>宿主启动时扫描上一代留下的未确认命令，这一轮明确报失败并确认，不再一直转圈</li>
+          <li>BE 给每轮设兜底超时</li>
+          <li>重复或已消费的提问回答不再发结束事件</li>
+          <li>稳定消息 ID + 查重，重投不多开一轮</li>
+          <li>修复超长结果的存放位置；后台任务加时限</li>
+          <li>收窄传给工具沙箱的环境变量（白名单）</li>
+          <li>模型重试时前端不重复</li>
+          <li>委派、团队闸门加时限；事件写失败不再静默吞掉</li>
+          <li>核实两个推断：优雅停机清队列、共享存储挂住；确认存储的挂载方式</li>
+        </ul>
+        <div class="ph-r">解决问题 1、2、3、8、9、11 的用户可见部分，以及 10 的时限<span class="gate">下一步：阶段 0 的故障场景全部通过</span></div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 1</span><b>升级 DSH 到最新版</b><span class="ph-t">约 2–3 周 · 含验证</span></div>
+        <ul>
+          <li>Node 升到 24.9 以上</li>
+          <li>迁移模型选择到新接口（确定不兼容，影响每轮选模型）</li>
+          <li>修复其他接口差异，核对多用户宿主的配置覆盖</li>
+          <li>跑能力对齐探针，确认存量会话能打开</li>
+        </ul>
+        <div class="ph-r">代码基线一步到位，还能用上新的定时任务恢复等能力<span class="gate">下一步：能力对齐探针全部相同</span></div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 2</span><b>进度记录与启动续跑</b><span class="ph-t">约 3–4 周</span></div>
+        <ul>
+          <li>每轮开始写绑定记录（命令、trace id、沙箱、尝试序号、版本），不加新存储</li>
+          <li>启动续跑器：已完成补发；被中断新起尝试并附恢复说明；等待继续等待；缺失消息对账补投</li>
+          <li>结局事件：先落盘，再发 Redis，再记已发送；后台任务未完时轮次保持打开</li>
+          <li>尝试序号当重启计数，到上限明确失败；续跑前再确认凭证、审批和外部动作</li>
+          <li><code>callId</code> 传给自有工具作幂等键</li>
+          <li>模板委派改用 <code>waitForChildren</code></li>
+          <li>运维可查：按用户和会话看每轮进度</li>
+        </ul>
+        <div class="ph-r">解决问题 1、5、10；“不丢、不卡”从兜底变成机制<span class="gate">下一步：宿主重启场景通过</span></div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 3</span><b>轮次索引，BE 以账本为准</b><span class="ph-t">约 2–3 周</span></div>
+        <ul>
+          <li>BE 数据库加一张轮次表</li>
+          <li>结局落盘后才更新；BE 按索引收尾，取代“收到结束事件就关闭”</li>
+          <li>索引由 BE 消费结局事件写入，宿主不直连数据库</li>
+          <li>Redis 命令仍等结局落盘后确认；Redis 丢失时 BE 按索引重投未结束的轮次，稳定 ID 防重</li>
+          <li>Redis 丢失时 BE 向宿主对账并重建快照</li>
+          <li>入口按 clientRequestId 去重（前端加自动重发时做）</li>
+        </ul>
+        <div class="ph-r">解决问题 4、6；Redis 退回通道<span class="gate">下一步：单宿主的容量或故障影响面成为实际限制</span></div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">并行</span><b>宿主承载能力</b><span class="ph-t">阶段 4 之前完成</span></div>
+        <ul>
+          <li>宿主级准入：每用户轮次槽位、模型并发限制，给人的消息留名额</li>
+          <li>健康面板：Redis、BE、存储写入延迟、模型重试、沙箱启动失败；连续失败 3 次才告警</li>
+          <li>确定性 Watchdog：多久没进展就介入，不用 LLM</li>
+          <li>kill -9 级别的故障注入测试</li>
+        </ul>
+        <div class="ph-r">解决问题 12；一个用户的问题不扩散到其他人</div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 4</span><b>可迁移的多宿主</b><span class="ph-t">有条件 · 与宿主池方案合并</span></div>
+        <ul>
+          <li>目标不是无状态，而是可随时重启、用户几秒内可迁移</li>
+          <li>先验证共享存储能否做 fencing</li>
+          <li>用户 → 宿主的租约放进索引，带纪元号</li>
+          <li>新宿主拿到租约后，按阶段 2 的规则新起一次尝试</li>
+          <li>会话写入前校验纪元（需要实现 DSH 的存储接口，文件锁不够）</li>
+        </ul>
+        <div class="ph-r">容量能横向扩；单个宿主故障只影响片刻<span class="gate">下一步：出现独立流服务的任一触发条件</span></div>
+      </div>
+      <div class="phase">
+        <div class="ph-h"><span class="ph-n">阶段 5</span><b>独立流服务</b><span class="ph-t">有条件 · 没有触发就不做</span></div>
+        <ul>
+          <li>选型：Durable Streams、NATS JetStream、S2 等，先用真实流量比较</li>
+          <li>新旧通道并行一段时间，再下线 Redis 上的实时流</li>
+        </ul>
+        <div class="ph-r">解决问题 7；实时流可独立扩容，多方读取同一条流</div>
+      </div>
+    </div>
+    <p class="srcline">工期为粗估，以 1–2 人投入计，需在阶段 0 结束后复核。阶段 4、5 的工期等触发后再估。阶段 1 确定的不兼容只来自抽查，没有做完整的类型检查，实际工作量可能更大。</p>
+  </section>
+
+  <section id="p7">
+    <h2><span class="n">07</span>怎么验收：故障注入清单</h2>
+    <p class="sub">每一项都做成可重复的自动化用例，在验证环境跑。表里是每个阶段结束后的预期结果。阶段 1 是升级，不改变这些行为，所以没有单列。</p>
+    <div class="card">
+      <table class="matrix">
+        <tr><th style="width:27%">故障</th><th>今天</th><th>阶段 0 后</th><th>阶段 2 后</th><th>阶段 3/4 后</th></tr>
+        <tr><td>模型回答中途重启宿主</td><td><span class="badge no">一直转圈</span></td><td><span class="badge part">明确失败，提示重试</span></td><td><span class="badge ok">新一次尝试接着做</span></td><td><span class="badge ok">换宿主也续跑</span></td></tr>
+        <tr><td>模型中途断流后重试</td><td><span class="badge part">可能重复显示（待实测）</span></td><td><span class="badge ok">替换这一步</span></td><td><span class="badge ok">同左</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>bash 执行中重启宿主</td><td><span class="badge no">一直转圈</span></td><td><span class="badge part">明确失败，提示重试</span></td><td><span class="badge ok">模型收到“结果未知”并处理</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>等用户回答时重启宿主</td><td><span class="badge part">冷恢复</span></td><td><span class="badge part">冷恢复</span></td><td><span class="badge ok">继续等待</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>同一回答提交三次</td><td><span class="badge no">可能提前收尾</span></td><td><span class="badge ok">只算一次</span></td><td><span class="badge ok">只算一次</span></td><td><span class="badge ok">只算一次</span></td></tr>
+        <tr><td>委派成员卡死</td><td><span class="badge no">一直转圈</span></td><td><span class="badge ok">超时失败，带回已完成部分</span></td><td><span class="badge ok">同左，可查进度</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>任务进行中沙箱被删</td><td><span class="badge part">当前命令报错</span></td><td><span class="badge part">当前命令报错</span></td><td><span class="badge ok">模型收到结果未知，重建后继续</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>宿主正常停机时有排队消息</td><td><span class="badge part">可能丢失（待核实）</span></td><td><span class="badge ok">不丢</span></td><td><span class="badge ok">不丢，并接着处理</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>Redis 重启</td><td><span class="badge no">在途回答丢失</span></td><td><span class="badge part">有告警</span></td><td><span class="badge part">宿主侧不丢，前端可能缺段</span></td><td><span class="badge ok">对账后重建</span></td></tr>
+        <tr><td>前端断网 30 秒后重连</td><td><span class="badge part">快照替换</span></td><td><span class="badge part">快照替换</span></td><td><span class="badge part">快照替换</span></td><td><span class="badge part">快照替换（流服务后按序号）</span></td></tr>
+        <tr><td>同一命令被 Redis 重投</td><td><span class="badge part">运行中的会从头重跑</span></td><td><span class="badge ok">稳定 ID 去重</span></td><td><span class="badge ok">同左</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>同一帧重复到达 BE</td><td><span class="badge part">算新消息，多被运行中检查挡住</span></td><td><span class="badge part">同左</span></td><td><span class="badge part">同左</span></td><td><span class="badge ok">入口也去重</span></td></tr>
+        <tr><td>后台任务在这一轮结束后才完成</td><td><span class="badge part">输出可能丢失（待实测）</span></td><td><span class="badge part">有时限</span></td><td><span class="badge ok">轮次保持打开，结果送达</span></td><td><span class="badge ok">同左</span></td></tr>
+        <tr><td>超长工具结果</td><td><span class="badge part">可能读不到（待实测）</span></td><td><span class="badge ok">存到会话目录</span></td><td><span class="badge ok">同左</span></td><td><span class="badge ok">同左</span></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="p8">
+    <h2><span class="n">08</span>需要定的事</h2>
+    <div class="card">
+      <ul class="rkv">
+        <li><b>宿主重启后的续跑</b>：已定。新起一次尝试并附恢复说明，先核实再行动；尝试次数有上限。外部副作用仍可能重复，<a href="sandbox-state-security-summary-v2.html">研究也指出</a>正确恢复不等于安全恢复，所以续跑前要确认凭证、审批和外部动作。</li>
+        <li><b>宿主彻底挂了谁来标失败</b>：已定。内容和进度只由宿主写，BE 用兜底超时在展示层标失败，宿主恢复后再对账。</li>
+        <li><b>先止血还是先升级</b>：已定。先止血；修复基本与 DSH 版本无关。</li>
+        <li><b>升级跟 alpha 还是等正式版</b>：已定。验证环境先跟，线上等 rc。</li>
+        <li><b>阶段 0 的范围</b>：已定。“模型重试时前端不重复”放在阶段 0。</li>
+        <li><b>后台任务结束时</b>：已定。有后台任务时这一轮保持打开，带时限。</li>
+        <li><b>超级助手的指令文件</b>：已定。暂不改“每轮读最新”，压测看到压力再评估。</li>
+        <li><b>上游协作</b>：已定。对账补投能补偿丢消息的窗口，给 DSH 提 PR 降为可选。</li>
+        <li><b>失败的产品表现</b>：待定。一轮多久没进展算失败；失败时用户看到什么。</li>
+      </ul>
+    </div>
+    <div class="more" id="dataflow-src"><span>资料</span><a href="https://github.com/earendil-works/pi/tree/main/packages/durable" target="_blank" rel="noopener">Pi Durable 源码与规格 ↗</a><a href="https://earendil.com/posts/pi-durable/" target="_blank" rel="noopener">Pi Durable 发布文章 ↗</a><a href="https://www.sqlite.org/wal.html" target="_blank" rel="noopener">SQLite WAL 的限制 ↗</a><a href="pi-durable-research.html">站内 Pi Durable 早期调研 →</a><a href="temporal-research.html">站内 Temporal 调研 →</a><a href="agent-infrastructure-briefing-v2.html">架构汇报 →</a></div>
+    <p class="srcline">本规划依据内部调研：Pi Durable 能力清单（主线 6fed3cfb 与 npm 1.4.0）、ByClaw 一轮对话数据流（D0.6.0 57326a580）、DSH 持久化与恢复分析（master ce7073d512，0.2.2-alpha.2，并与 ByClaw 当前的 rc.2 对比）、Super-agent 原型基础设施分析（6337fc8）。均为读代码得出，未运行；标“推断”和“待实测”的要在验证环境确认。</p>
+  </section>
+
+  </main>
+</div>
+
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); });
+}, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => {
+  ev.preventDefault();
+  const s = document.getElementById(a.dataset.sec);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', '#' + a.dataset.sec);
+}));
+
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer');
+  const bar = document.getElementById('annBar');
+  const launch = document.getElementById('annLaunch');
+  const toggle = document.getElementById('annToggle');
+  const colorEl = document.getElementById('annColor');
+  const sizeEl = document.getElementById('annSize');
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = [];
+  const strokes = [];
+  let fitting = false;
+  const fit = () => {
+    if (fitting) return;
+    fitting = true;
+    layer.style.width = '0px';
+    layer.style.height = '0px';
+    const w = document.documentElement.clientWidth;
+    const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    layer.setAttribute('width', w);
+    layer.setAttribute('height', h);
+    layer.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    fitting = false;
+  };
+  fit();
+  addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.body);
+  const setOn = v => {
+    on = v;
+    document.body.classList.toggle('ann-on', on);
+    toggle.textContent = on ? '标注中' : '开启标注';
+    toggle.classList.toggle('on', on);
+  };
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => {
+    tool = b.dataset.tool;
+    document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b));
+    if (!on) setOn(true);
+    strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; });
+  }));
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => { const last = strokes.pop(); if (last) last.remove(); });
+  document.getElementById('annClear').addEventListener('click', () => { while (strokes.length) strokes.pop().remove(); });
+  document.getElementById('annHide').addEventListener('click', () => { setOn(false); bar.classList.add('hidden'); launch.classList.add('show'); });
+  launch.addEventListener('click', () => { bar.classList.remove('hidden'); launch.classList.remove('show'); });
+  const at = e => { const r = layer.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  layer.addEventListener('pointerdown', e => {
+    if (!on || e.button !== 0) return;
+    if (tool === 'eraser') return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    drawing = true;
+    pts = [at(e)];
+    cur = document.createElementNS(NS, 'path');
+    const w = +sizeEl.value;
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke', colorEl.value);
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    if (tool === 'mark') { cur.setAttribute('stroke-width', w * 3.2); cur.setAttribute('stroke-opacity', '0.32'); cur.style.mixBlendMode = 'multiply'; }
+    else { cur.setAttribute('stroke-width', w); }
+    cur.style.pointerEvents = 'none';
+    cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`);
+    layer.appendChild(cur);
+  });
+  layer.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = at(e), last = pts[pts.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return;
+    pts.push(p);
+    cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`);
+  });
+  const end = () => { if (!drawing) return; drawing = false; if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); } cur = null; };
+  layer.addEventListener('pointerup', end);
+  layer.addEventListener('pointercancel', end);
+  layer.addEventListener('pointerover', e => {
+    if (on && tool === 'eraser' && e.target !== layer) { const i = strokes.indexOf(e.target); if (i > -1) { strokes.splice(i, 1); e.target.remove(); } }
+  });
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape' && on) setOn(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) { e.preventDefault(); const last = strokes.pop(); if (last) last.remove(); }
+  });
+})();
+</script>
+</body>
+</html>
+

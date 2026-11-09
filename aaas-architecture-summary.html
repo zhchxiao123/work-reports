@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent as a Service 架构：文章总结</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  body { padding-right: 24px; }
+  .mini { max-width: 960px; margin: 0 auto; }
+  .tldr { margin-top: 14px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+  .lead b { color: var(--slate); }
+  section { margin-top: 42px; }
+  .srcline { margin-top: 24px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
+  .more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 14px; font-size: 12px; }
+  .more span { font-family: var(--mono); font-size: 10.5px; color: var(--gray-500); }
+  .more a { color: var(--gray-700); text-decoration: none; border-bottom: 1px dashed var(--gray-300); }
+  .more a:hover { color: var(--rust); }
+  td a { color: var(--rust); }
+</style>
+</head>
+<body>
+<div class="mini">
+  <a class="doc-home" href="agent-infrastructure-briefing.html#a2">← 返回汇报：我们的思路</a>
+  <header>
+    <div class="eyebrow">文章总结 · 阿里云云原生 · 作者 刘军</div>
+    <h1>Agent as a Service：一套架构同时服务个人和企业</h1>
+    <p class="lead">Personal Agent 要在用户离开后继续工作，企业智能体要在内网和沙箱之间调度工具、等待人工确认。两者的共同要求是：<b>Agent 的身份、任务状态和长期积累，不能绑定在某个客户端、某个进程或某个执行环境上</b>。</p>
+    <div class="tldr"><b>一句话</b>：把“持久的任务状态”“按需运行的计算”“可切换的执行环境”拆开，再用稳定的任务标识和执行协议连起来。ByClaw 已经走在这条路上，文章也印证了我们接下来要补的稳定性工作。</div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="n">01</span>核心区分：Harness 在沙箱里面还是外面</h2>
+    <p class="sub">判断标准只有一个：Agent 循环实际在哪里运行。文章选择 Sandbox as Tool 作为服务化路径，但也说明这不是唯一答案，要看任务与环境的耦合程度。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:18%">对比</th><th style="width:41%">Agent IN Sandbox</th><th>Sandbox as Tool</th></tr>
+        <tr><td>做法</td><td>Agent 和工具都装在同一个沙箱</td><td>Harness 在服务端，需要动手时调用沙箱</td></tr>
+        <tr><td>适合</td><td>高度依赖现有 CLI、复杂工具链、大量本地操作</td><td>需要分别调度、长期运行的托管服务</td></tr>
+        <tr><td>资源调度</td><td>推理和环境生命周期绑得紧</td><td>可以按负载分别调度</td></tr>
+        <tr><td>长期状态</td><td>要从环境里提取并外置</td><td>围绕独立的任务记录组织</td></tr>
+        <tr><td>权限</td><td>要区分运行组件和生成代码的权限</td><td>可在远程工具边界集中检查，模型凭据留在沙箱外</td></tr>
+        <tr><td>代价</td><td>同时判断进程和环境的状态</td><td>多了网络交互，要明确工具到底执行了没有</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="n">02</span>整体架构</h2>
+    <figure>
+      <div class="fig-h">依据原文重绘的示意<span>绿 = 大脑 · 灰 = 状态与平台服务 · 橙 = 手</span></div>
+      <svg class="rf" viewBox="0 0 880 370" role="img" aria-label="Agent as a Service 架构：个人和企业入口进入任务受理与执行权协调，本地或远端 Harness 取得执行权，读取云端状态服务，并通过统一工具协议调用本地、云端或内网 Hands">
+        <rect class="box-d" x="180" y="8" width="230" height="40" rx="8"/><text x="295" y="33" text-anchor="middle">Personal Agent：多入口 · 定时任务</text>
+        <rect class="box-d" x="470" y="8" width="230" height="40" rx="8"/><text x="585" y="33" text-anchor="middle">企业智能体：业务事件 · 单据 · 工作流</text>
+        <line class="ln" x1="295" y1="48" x2="400" y2="68"/><line class="ln" x1="585" y1="48" x2="480" y2="68"/>
+        <rect class="box-d" x="280" y="68" width="320" height="38" rx="8"/><text x="440" y="92" text-anchor="middle">身份与授权 · 任务受理 · 执行权协调</text>
+        <line class="ln" x1="440" y1="106" x2="440" y2="126"/>
+        <rect class="box" x="210" y="126" width="460" height="72" rx="10"/>
+        <rect class="box-ok" x="224" y="138" width="150" height="48" rx="7"/><text x="299" y="160" text-anchor="middle" style="font-weight:600">本地 Harness</text><text x="299" y="176" text-anchor="middle" class="tiny">① 工作区交互与续做</text>
+        <rect class="box-ok" x="506" y="138" width="150" height="48" rx="7"/><text x="581" y="160" text-anchor="middle" style="font-weight:600">远端托管 Harness</text><text x="581" y="176" text-anchor="middle" class="tiny">① 持续执行与后台任务</text>
+        <text x="440" y="158" text-anchor="middle" class="lab">② 检查点与</text><text x="440" y="175" text-anchor="middle" class="lab">执行权交接</text>
+        <line class="ln-d" x1="374" y1="162" x2="396" y2="162"/><line class="ln-d" x1="484" y1="162" x2="506" y2="162"/>
+        <line class="ln" x1="270" y1="198" x2="170" y2="230"/>
+        <rect class="box-d" x="20" y="230" width="300" height="52" rx="8"/><text x="170" y="252" text-anchor="middle" style="font-weight:600">③ 云端状态服务</text><text x="170" y="270" text-anchor="middle" class="tiny">Context · Memory · 检查点 · 待办 · 工具记录</text>
+        <line class="ln" x1="600" y1="198" x2="640" y2="230"/>
+        <rect class="box-d" x="480" y="230" width="320" height="38" rx="8"/><text x="640" y="254" text-anchor="middle">④ 统一工具协议与授权路由</text>
+        <line class="ln" x1="540" y1="268" x2="430" y2="306"/><line class="ln" x1="640" y1="268" x2="640" y2="306"/><line class="ln" x1="740" y1="268" x2="810" y2="306"/>
+        <rect class="box-x" x="340" y="306" width="180" height="50" rx="8"/><text x="430" y="328" text-anchor="middle" style="font-weight:600">本地 Hands</text><text x="430" y="345" text-anchor="middle" class="tiny">设备文件 · 浏览器 · 桌面</text>
+        <rect class="box-x" x="540" y="306" width="160" height="50" rx="8"/><text x="620" y="328" text-anchor="middle" style="font-weight:600">云端 Hands</text><text x="620" y="345" text-anchor="middle" class="tiny">隔离沙箱 · 代码执行</text>
+        <rect class="box-x" x="710" y="306" width="160" height="50" rx="8"/><text x="790" y="328" text-anchor="middle" style="font-weight:600">企业内网 Hands</text><text x="790" y="345" text-anchor="middle" class="tiny">业务 API · MCP · 内网</text>
+      </svg>
+      <figcaption>图中编号对应下面的四个层次。同一任务同一时刻只由取得执行权的一个 Harness 推进。</figcaption>
+    </figure>
+    <div class="card">
+      <h3>四个可以组合的层次</h3>
+      <ul class="rkv" style="margin-top:6px">
+        <li><b>① 远端托管 Harness</b>：客户端断开后，任务仍由服务继续。</li>
+        <li><b>② 本地与远端交接执行</b>：在检查点确认原执行者退出后，另一端取得执行权续做。</li>
+        <li><b>③ Context 和 Memory 上云</b>：状态和长期积累跨越单个 Harness 实例的生命周期。</li>
+        <li><b>④ Brain 和 Hands 分离</b>：工具按能力、权限和数据位置路由到本地、云端或内网。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="n">03</span>最值得借鉴的：长任务怎么挂起和恢复</h2>
+    <p class="sub">等工具、等人工时不占推理资源，靠的是一条持久化的执行协议。</p>
+    <ol class="trace">
+      <li><div class="tr-head"><b>受理</b></div><div class="tr-body"><p>持久保存输入、会话和任务标识、配置版本；网络重试沿用同一请求标识。</p></div></li>
+      <li><div class="tr-head"><b>启动推理</b></div><div class="tr-body"><p>调度层先取得执行权，再加载状态，由 Harness 推进。</p></div></li>
+      <li><div class="tr-head"><b>派发工具</b></div><div class="tr-body"><p>检查权限，保存参数和稳定执行标识，再交给执行层。</p></div></li>
+      <li><div class="tr-head"><b>保存等待</b></div><div class="tr-body"><p>工具耗时长时，保存检查点和待等待的工具集合，确认落盘后挂起并释放推理资源。</p></div></li>
+      <li><div class="tr-head"><b>恢复</b></div><div class="tr-body"><p>结果保存后通知调度层，核对等待条件，取得执行权，合并结果后继续。</p></div></li>
+      <li><div class="tr-head"><b>交付</b></div><div class="tr-body"><p>保存终态、回复和产物。浏览器断开不影响任务状态。</p></div></li>
+    </ol>
+    <div class="card" style="margin-top:12px"><h3>两个容易忽略的点</h3>
+      <ul class="rkv" style="margin-top:6px">
+        <li><b>聊天历史不够恢复</b>：它分不清工具是还没派发、正在跑，还是已返回但没进入下一次模型输入。</li>
+        <li><b>外部动作要保留 unknown</b>：超时后工单可能已经建了。按执行标识查询，或转人工，不要直接重做。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="n">04</span>个人和企业复用同一套基础</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:18%">维度</th><th style="width:41%">Personal Agent</th><th>企业事件驱动 Agent</th></tr>
+        <tr><td>服务对象</td><td>个人及其持续目标</td><td>团队、岗位或业务流程</td></tr>
+        <tr><td>触发</td><td>对话、定时任务、用户授权的事件</td><td>告警、消息、单据、业务状态变化</td></tr>
+        <tr><td>长期信息</td><td>个人偏好、项目和工作记忆</td><td>业务知识、规则、历史处理经验</td></tr>
+        <tr><td>人工参与</td><td>补充要求、确认动作</td><td>按角色和流程复核、审批</td></tr>
+        <tr><td>结果</td><td>可继续使用的文件和任务结果</td><td>可核验的业务产物和状态变化</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="n">05</span>对照 ByClaw</h2>
+    <p class="sub">这一节是我们的判断，不是原文内容。</p>
+    <div class="card">
+      <table class="matrix">
+        <tr><th style="width:26%">文章的要点</th><th style="width:12%">ByClaw</th><th>现状和下一步</th></tr>
+        <tr><td>Sandbox as Tool</td><td><span class="badge ok">已做到</span></td><td>共享宿主在沙箱外，工具沙箱按需启动</td></tr>
+        <tr><td>① 远端托管 Harness</td><td><span class="badge ok">已做到</span></td><td>对话在服务端，浏览器断开后继续</td></tr>
+        <tr><td>④ Brain 和 Hands 分离</td><td><span class="badge part">部分</span></td><td>分离已完成，目前只有云端沙箱；<a href="agent-infrastructure-briefing.html#a8">一人多沙箱</a>是下一步，内网和本地 Hands 还没规划</td></tr>
+        <tr><td>③ 状态独立于实例</td><td><span class="badge part">部分</span></td><td>内容已在 DSH 日志，进度还在内存；<a href="byclaw-durable-ledger.html">账本规划</a>补这一块</td></tr>
+        <tr><td>挂起与恢复</td><td><span class="badge part">部分</span></td><td>记工具意图、未知结果 DSH 已有；启动续跑在规划的阶段 2。等待时释放推理资源还没有规划，是否需要要看共享宿主的实际占用</td></tr>
+        <tr><td>执行权</td><td><span class="badge no">未做</span></td><td>单宿主时不需要；多宿主阶段用带纪元号的租约实现</td></tr>
+        <tr><td>② 本地与远端交接</td><td><span class="badge no">未规划</span></td><td>ByClaw 目前没有本地 Harness 形态，是否需要要看产品方向</td></tr>
+      </table>
+      <div class="delta"><b>可以直接采纳</b>：把“工具结果 unknown 时查询或转人工”写进工具规范；用文章的场景（断线、节点退出、重复投递、人工确认）补充我们的验收清单。</div>
+    </div>
+    <div class="note">
+      <h2>阅读时注意</h2>
+      <ul>
+        <li>这是阿里云的架构方法文章，后半部分推荐自家 AgentScope 和 AgentCore，属于厂商视角。</li>
+        <li>文章讲设计思路，没有给出性能或稳定性实测数据。</li>
+      </ul>
+    </div>
+    <div class="more"><span>延伸阅读</span><a href="https://mp.weixin.qq.com/s/u80EW2vjHx2U8x2kkMPEzw" target="_blank" rel="noopener">阅读原文 ↗</a><a href="https://github.com/aliyun/ai-agent-handbook" target="_blank" rel="noopener">AI Agent Handbook ↗</a><a href="https://java.agentscope.io/" target="_blank" rel="noopener">AgentScope ↗</a><a href="agent-infrastructure-briefing.html">我们的架构汇报 →</a><a href="byclaw-durable-roadmap.html">稳定性演进规划 →</a></div>
+  </section>
+  <p class="srcline">原文作者刘军，阿里云云原生。本页为摘要，架构图依据原文重绘，版权归原作者所有。</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>RocketMQ LiteTopic｜AI 会话通道与恢复边界深入分析</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#FAF9F5;color:#141413;font:16px/1.65 system-ui,-apple-system,sans-serif}header,main,footer{max-width:1180px;margin:auto;padding:36px 28px}header{padding-top:64px}h1{font-size:clamp(32px,4vw,52px);line-height:1.2;margin:15px 0}h2{font-size:29px;line-height:1.3;margin:5px 0 12px}h3{font-size:18px;margin:8px 0}p{margin:10px 0}.lead{color:#66665e;max-width:900px}.eyebrow{color:#788C5D;font-size:13px;font-weight:750;letter-spacing:2px}section{padding:36px 0;border-top:1px solid #E3DACC;scroll-margin-top:20px}.chips{display:flex;gap:8px;flex-wrap:wrap}.chips span,.tag{background:#eaf0e4;color:#53633f;border-radius:20px;padding:5px 12px;font-size:12px}nav{display:flex;gap:16px;flex-wrap:wrap;margin-top:25px}a{color:#6e794a;text-decoration:none}a:hover{text-decoration:underline}.diagram{overflow:auto;margin:24px 0}svg{display:block;width:100%;min-width:800px;height:auto}svg text{font-size:16px;font-weight:650;fill:#141413}svg .sub{font-size:12px;font-weight:400;fill:#61645a}svg .label{font-size:14px;fill:#667a4c}.node rect{fill:#fff;stroke:#D1CFC5;stroke-width:1.5}.node{cursor:pointer}.node:hover rect,.node:focus rect{stroke:#D97757;stroke-width:2.5}.node.accent rect{fill:#fff1e9;stroke:#D97757}.node.olive rect{fill:#eef3e8;stroke:#788C5D}.area{fill:#F0EEE6;stroke:#E3DACC;stroke-dasharray:6 4}.arrow{fill:none;stroke:#788C5D;stroke-width:2;marker-end:url(#tip)}.callout{background:#F0EEE6;border-left:3px solid #788C5D;padding:16px 20px;border-radius:0 12px 12px 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:20px 0}article{background:white;border:1px solid #E3DACC;border-radius:14px;padding:20px}article p{color:#66665e;font-size:14px}details{background:#F0EEE6;border-radius:12px;padding:16px 20px;margin-top:20px}summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}td,th{text-align:left;padding:12px;border-bottom:1px solid #D1CFC5}code,pre{font:13px/1.6 ui-monospace,monospace}pre{white-space:pre-wrap}.tabs{display:flex;gap:8px;flex-wrap:wrap}button{border:1px solid #D1CFC5;border-radius:9px;background:white;padding:10px 16px;font:inherit;cursor:pointer}button.active{background:#788C5D;color:white;border-color:#788C5D}.sequence{display:flex;align-items:stretch;gap:10px;margin:22px 0;overflow:auto}.step{min-width:150px;flex:1;border:1px solid #E3DACC;background:white;border-radius:12px;padding:16px}.step b{color:#788C5D}.step small{display:block;color:#66665e}.step-arrow{align-self:center;color:#788C5D}.muted{background:#eee;color:#666}footer{font-size:12px;color:#87867F;border-top:1px solid #E3DACC}@media(max-width:760px){.grid{grid-template-columns:1fr}header,main,footer{padding-left:20px;padding-right:20px}h2{font-size:25px}}@media print{button,nav{display:none}section{break-inside:avoid}details{display:block}.diagram{overflow:visible}svg{min-width:0}body{font-size:12px}header{padding-top:20px}} .sources{font-size:13px;color:#777}.node{cursor:default}td{overflow-wrap:anywhere}
+.report-hero{background:#eaf0e2;border:1px solid #d5dfcc;border-radius:16px;padding:24px;margin:24px 0}.report-hero p{margin:8px 0}.boundary{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:24px 0}.boundary span{padding:12px 16px;border:1px solid #dedfd4;background:#fff;border-radius:9px;font-size:14px}.source{font-size:12px;color:#6f7669;margin:12px 0}.doc-content{overflow-wrap:anywhere}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}pre{padding:20px;background:#20271e;color:#e6ecde;border-radius:12px;overflow:auto;white-space:pre}table{display:block;overflow:auto}td:first-child{min-width:125px}.status{display:inline-block;border-radius:20px;padding:4px 10px;background:#f7ede5;color:#b85b3d;font-size:12px}.small{font-size:13px;color:#72796c}@media(max-width:850px){.grid{grid-template-columns:1fr}}
+.flow{display:flex;flex-direction:column;gap:10px;align-items:center;background:#edf1e6;padding:24px;border-radius:14px;margin:24px 0}.flow span{background:white;border:1px solid #d5ddcd;padding:14px 18px;border-radius:9px;text-align:center}.flow b{font-size:13px;color:#748063}.flow.horizontal{flex-direction:row;flex-wrap:wrap;justify-content:center}.demo{border:1px solid #d9decd;background:#f3f5ed;border-radius:14px;padding:24px;margin:24px 0}.demo-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.demo button{font:inherit;font-size:14px;border:1px solid #c9d0be;background:white;border-radius:8px;padding:10px 15px;cursor:pointer}.demo button[aria-pressed=true]{background:#687951;color:white}button:focus-visible{outline:3px solid #c98a69;outline-offset:3px}#recovery-case{background:white;padding:18px;border-radius:9px;min-height:112px}details{padding:18px;border:1px solid #dfe1d5;border-radius:10px;margin:16px 0}summary{cursor:pointer;font-weight:650}pre{font-size:13px}h1{font-size:clamp(32px,4vw,54px)}
+</style><style id="doc-sidebar-style">
+/* Shared document shell: modeled on the cluster deployment guide. */
+body.doc-page { margin:0; padding:0; background:#faf9f5; }
+.doc-layout { max-width:1260px; margin:0 auto; padding:40px 28px 90px;
+  display:grid; grid-template-columns:200px minmax(0,1fr); gap:46px; }
+body.doc-page .doc-sidebar { position:sticky; top:26px; align-self:start;
+  display:block; margin:0; padding:0; max-height:calc(100vh - 52px);
+  overflow-y:auto; font:13px/1.65 system-ui,-apple-system,sans-serif; }
+body.doc-page .doc-sidebar .doc-home { display:block; margin:0 0 24px;
+  color:#526742; text-decoration:none; padding:7px 10px; }
+body.doc-page .doc-sidebar .doc-label { display:block; margin:0 0 12px;
+  font-size:11px; font-weight:750; letter-spacing:.12em; color:#6f7669; }
+body.doc-page .doc-sidebar .doc-links { display:flex; flex-direction:column; gap:0; }
+body.doc-page .doc-sidebar .doc-links a { display:block; padding:7px 12px;
+  border-left:2px solid #dedfd4; color:#3d4538; text-decoration:none;
+  overflow-wrap:anywhere; font-size:13px; line-height:1.65; }
+body.doc-page .doc-sidebar .doc-links a:hover,
+body.doc-page .doc-sidebar .doc-links a[aria-current="location"] {
+  color:#b85b3d; border-left-color:#b85b3d; background:#f7ede550; }
+.doc-content { min-width:0; }
+body.doc-page .doc-content > header,
+body.doc-page .doc-content > main,
+body.doc-page .doc-content > footer { max-width:none; width:auto;
+  margin-left:0; margin-right:0; padding-left:0; padding-right:0; }
+body.doc-page .doc-content > header { padding-top:0; }
+body.doc-page .doc-content section { scroll-margin-top:24px; }
+body.doc-page .doc-content .diagram { max-width:100%; }
+body.doc-page .doc-sidebar a:focus-visible { outline:3px solid #b85b3d; outline-offset:3px; }
+/* The briefing keeps its original slideshow and keyboard navigation. */
+body.doc-page.present .doc-sidebar { display:none; }
+body.doc-page.present .doc-layout { display:block; max-width:1180px; padding-top:0; }
+body.doc-page.present .doc-content section { scroll-margin-top:80px; }
+@media(max-width:850px) {
+  .doc-layout { display:block; padding:24px 18px 60px; }
+  body.doc-page .doc-sidebar { position:static; max-height:none; overflow:visible;
+    margin-bottom:28px; }
+  body.doc-page .doc-sidebar .doc-home { margin-bottom:12px; }
+  body.doc-page .doc-sidebar .doc-links { flex-direction:row; flex-wrap:wrap; gap:6px; }
+  body.doc-page .doc-sidebar .doc-links a { padding:5px 8px; border:1px solid #dedfd4;
+    border-radius:6px; font-size:12px; }
+  body.doc-page .doc-content .grid { grid-template-columns:1fr; }
+  body.doc-page .doc-content table { display:block; max-width:100%; overflow-x:auto; }
+}
+@media print {
+  body.doc-page .doc-sidebar { display:none; }
+  .doc-layout { display:block; padding:0; max-width:none; }
+  .doc-content { width:100%; }
+}
+</style></head><body class="doc-page"><div class="doc-layout"><nav aria-label="章节目录" class="doc-sidebar"><a class="doc-home" href="index.html">← 研究资料首页</a><strong class="doc-label">阅读目录 / CONTENTS</strong><div class="doc-links"><a href="#why">01 轻的是通道成本，AI 价值在于寻址与解耦</a><a href="#model">02 父 Topic、LiteTopic、LMQ、消费组不是同一个对象</a><a href="#path">03 用就绪集合找有消息的通道，避免轮询全部订阅</a><a href="#versions">04 文档入口写着 5.0，能力要求却是 5.5+</a><a href="#offsets">05 第一次订阅，不能依赖默认起点恢复历史</a><a href="#ownership">06 Shared、Exclusive 都不能代替业务执行 fence</a><a href="#suspend">07 Suspend 当前消息，意味着它还没有成功 ACK</a><a href="#lifecycle">08 空闲 TTL 不是消息保留期，也不保护积压</a><a href="#security">09 子通道有边界，租户 ACL 仍要实际验证</a><a href="#ai">10 三种用途，三份不同的状态责任</a><a href="#compare">11 LiteTopic、JetStream、Durable Streams 应按消费契约比较</a><a href="#dsh">12 先实验响应通道，再评估任务交付与全局治理</a><a href="#validation">13 本次是文档与固定源码调研，运行集成仍待实验</a></div></nav><div class="doc-content"><header><div class="eyebrow">ROCKETMQ · LITETOPIC · AI 通信深入分析</div><h1>让每个会话拥有轻量通道<br/>恢复仍需要明确的状态契约</h1><p class="lead">从存储、订阅、起读、ACK、TTL 和授权源码，理解 LiteTopic 对 AI 网关与多 Agent 系统的实际价值。</p><div class="chips"><span>调研：2026-10-13</span><span>Server 5.5.1</span><span>Java 5.2.2</span><span>未运行集成验收</span></div><div class="report-hero"><b>结论先行</b><p>LiteTopic 最有价值的是低成本、动态、可恢复的细粒度消息通道，适合会话响应、任务回执与按维度退让。它把连接与消息交付解耦，但完整 Agent 恢复依然依赖业务历史、执行所有权和幂等结果。</p><p><b>本次核实的四个关键细节：</b>默认起点受内存条件影响；TTL 不因积压而停止清理；Java Suspend 不 ACK 当前消息；固定授权路径主要检查父 Topic 与 Group。</p></div></header><main><section id="why"><div class="eyebrow">01 / 设计动机</div><h2>轻的是通道成本，AI 价值在于寻址与解耦</h2>
+<p>AI 网关要把长任务的响应发回特定会话；多个 Agent 也需要向指定任务或对端传递结果。为每个会话创建普通 Topic / ConsumerGroup，管理与订阅成本会随会话数增长。LiteTopic 把这些短生命周期通道收进预先创建的父 Topic。</p>
+<div class="grid"><article><h3>会话 / 任务可寻址</h3><p>发送方用业务身份选择子通道；接收方动态订阅目标集合，避免所有实例接收后再过滤。</p></article><article><h3>生产与连接解耦</h3><p>后台任务可继续生产消息，网关实例负责消费与转发。浏览器连接重建不必重新启动推理，但这一点仍依赖后台任务的独立生命周期。</p></article></div>
+<p>RIP-83 在本次读取时已标为 Shipped。其目标是补充 HTTP / gRPC 的异步通信方式；它不提供模型推理、任务规划或完整 Agent 检查点。</p>
+<p class="source">依据：<a href="https://github.com/apache/rocketmq/wiki/RIP%E2%80%9083-Lite-Topic%3A-A-New-Message-Model">RIP-83</a>。下文的 DSH 接入判断是本项目分析。</p></section><section id="model"><div class="eyebrow">02 / 对象与存储</div><h2>父 Topic、LiteTopic、LMQ、消费组不是同一个对象</h2>
+<div class="flow"><span>父 Topic：预先创建 / LITE 类型</span><b>↓ 路由与业务命名空间</b><span>LiteTopic：会话、任务或用户维度</span><b>↓ 内部 LMQ / ConsumeQueue 索引</b><span>共享 CommitLog 消息体 → 消费组位点 → 消费实例</span></div>
+<table><tr><th>对象</th><th>管理什么</th><th>设计边界</th></tr><tr><td>父 Topic</td><td>类型、路由与 Lite 配置</td><td>必须先创建；不能只调用子通道 API</td></tr><tr><td>LiteTopic</td><td>细粒度有序索引与订阅目标</td><td>父 Topic + 子名称共同寻址</td></tr><tr><td>LMQ</td><td>轻量 ConsumeQueue 的基础机制</td><td>LiteTopic 基于 LMQ；旧 LMQ 不都属于新 Lite 模型</td></tr><tr><td>ConsumerGroup</td><td>消费进度与组级模式</td><td>绑定父 Topic，位点不能与浏览器进度混为一谈</td></tr><tr><td>Client</td><td>订阅集合、接收与处理</td><td>同组实例可订阅不同子集合</td></tr></table>
+<p>固定版本将内部子通道编码为 <code>%LMQ%$parent$child</code>。这不是建议应用手工拼接的公共身份。消息体仍在 CommitLog，子通道主要建立轻量索引；“独立通道”不等于每个租户拥有独立磁盘、CPU 或故障域。</p>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/common/src/main/java/org/apache/rocketmq/common/lite/LiteUtil.java">LiteUtil / LMQ 命名</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/store/src/main/java/org/apache/rocketmq/store/LmqDispatch.java">LMQ 分派</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/store/src/main/java/org/apache/rocketmq/store/queue/RocksDBConsumeQueueStore.java">RocksDB CQ 索引</a> · <a href="https://rocketmq.apache.org/docs/domainModel/03litetopic/">领域模型</a></p></section><section id="path"><div class="eyebrow">03 / 消息交付路径</div><h2>用就绪集合找有消息的通道，避免轮询全部订阅</h2>
+<div class="flow horizontal"><span>Producer 写消息</span><b>→</b><span>CommitLog + LMQ 索引</span><b>→</b><span>Broker ready set</span><b>→</b><span>按 client POP</span><b>→</b><span>消费结果 / ACK</span></div>
+<details open=""><summary>为什么它适合大量闲置、少量活跃的会话</summary><p>Broker 跟踪组、client 与子通道订阅；通道有可消费消息时进入事件就绪集合。客户端面向自身身份获取多个通道的消息，不必对数千个空通道逐个发起拉取。</p></details>
+<details><summary>当就绪集合达到上限，或实例不活跃时</summary><p>实现保留限额、重新扫描和重新分发路径。同组有多个订阅者时，可选择其他 client 接收。事件机制不意味着无限内存、永久实例亲和，或固定毫秒级故障恢复。</p></details>
+<p>发送确认、Broker 存储、消费确认、业务结果和浏览器收到输出，是不同阶段。消息层无法直接证明一次工具调用成功，也无法使任意外部系统与 ACK 原子提交。</p>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/lite/LiteEventDispatcher.java">LiteEventDispatcher</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/processor/PopLiteMessageProcessor.java">POP 处理</a></p></section><section id="versions"><div class="eyebrow">04 / 版本与 SDK</div><h2>文档入口写着 5.0，能力要求却是 5.5+</h2>
+<table><tr><th>层次</th><th>本次核实</th><th>含义</th></tr><tr><td>领域文档</td><td>Server ≥ 5.5.0；gRPC SDK ≥ 5.1.0</td><td>页面的 Version: 5.0 是文档系列，不是能力最低版本</td></tr><tr><td>固定 Server</td><td>5.5.1；2026-08-20 发布</td><td>本报告按 efa1be59… 源码核对</td></tr><tr><td>固定客户端</td><td>Java 5.2.2；2026-08-26 发布</td><td>6e2185bb… 是多语言仓库快照，不能代表所有语言包的相同版本</td></tr><tr><td>Java 首次支持证据</td><td>Java 5.1.0 release 列出 LiteTopic</td><td>使用 gRPC Java API；不能套用经典 remoting client</td></tr><tr><td>新消费路径</td><td>5.5.1 有 Lite Simple Consumer 支持</td><td>领域文档的“ordered only”不能覆盖所有新配置</td></tr></table>
+<p>客户端快照可见 Java、Go、Node.js、Python、C#、Rust 的 LitePush 实现；Java / Go 还可见 LiteSimple。路径存在只说明实现证据，包发布版本、稳定性和与 Server 的组合仍需逐语言验证。当前 DSH 使用 TypeScript；本次进一步核验了 Node.js npm 制品，结果如下，运行兼容性仍需验收。</p>
+<table><tr><th>语言</th><th>已发行 / 源码证据</th><th>仍需验证</th></tr><tr><td>Java</td><td>5.2.2；LitePush / LiteSimple API</td><td>Server 组合与实际消费配置</td></tr><tr><td>Go</td><td>5.1.4 tag 有 LitePush；该 tag 未见 LiteSimple</td><td>不能从共享仓库新树倒推该包支持 LiteSimple</td></tr><tr><td>C#</td><td>5.2.1 tag 有 LitePush</td><td>应用集成与故障行为</td></tr><tr><td>Node.js</td><td>npm 1.0.8 下载包有 LitePush dist / 类型 / 源码；SHA-512 与 registry 一致</td><td>未执行导入、连接或集成测试</td></tr><tr><td>Python / Rust</td><td>固定仓库树可见 LitePush</td><td>对应包发行与运行能力未核验</td></tr><tr><td>C++</td><td>5.1.1 tag 未发现 Lite 专用路径</td><td>不以版本号推断 Lite 支持</td></tr></table><p class="source"><a href="https://github.com/apache/rocketmq-clients/releases/tag/golang%2Fv5.1.4">Go release</a> · <a href="https://github.com/apache/rocketmq-clients/releases/tag/csharp-5.2.1">C# release</a> · <a href="https://registry.npmjs.org/rocketmq-client-nodejs/1.0.8">Node.js npm 制品元数据</a> · <a href="https://github.com/apache/rocketmq-clients/releases/tag/cpp-5.1.1">C++ release</a></p><p>固定 Java 实现根据 settings 的 FIFO 选择 <code>LiteFifoConsumeService</code> 或 <code>LiteStandardConsumeService</code>。需要会话按序推进时，应明确 FIFO 配置，不能仅凭名字带 Lite 就推断回调总是串行。</p>
+<p class="source"><a href="https://github.com/apache/rocketmq/releases/tag/rocketmq-all-5.5.1">Server 5.5.1 release</a> · <a href="https://github.com/apache/rocketmq-clients/releases/tag/java-5.1.0">Java 5.1.0</a> · <a href="https://github.com/apache/rocketmq-clients/releases/tag/java-5.2.2">Java 5.2.2</a> · <a href="https://github.com/apache/rocketmq-clients/blob/6e2185bb638b639663bda240cf119804a595e099/java/client/src/main/java/org/apache/rocketmq/client/java/impl/consumer/LitePushConsumerImpl.java">FIFO / Standard 分支</a></p></section><section id="offsets"><div class="eyebrow">05 / 起读与恢复</div><h2>第一次订阅，不能依赖默认起点恢复历史</h2>
+<p>5.5.1 的 POP 路径在某个 group + LMQ 没有消费位点时，传入 MAX 模式，但复用的初始化方法通常取 maxOffset−1（最后一条）；若首条仍在内存且相关条件满足，则可能取 0。先生产历史消息、随后用新消费组订阅，不能依赖这个冷热相关的默认行为。相同组的已有位点可用于实例换手；换组则是另一份消费进度。</p>
+<table><tr><th>起读选项</th><th>固定版本需注意</th></tr><tr><td>未显式设置</td><td>默认路径通常从最后一条；满足内存条件时可能从 0</td></tr><tr><td>显式 MAX</td><td>订阅配置将位点设为当前队尾，与缺省 POP 初始化路径要区分</td></tr><tr><td>MIN / 指定 OFFSET</td><td>可用于明确历史起点；受实际保留范围限制</td></tr><tr><td>TIMESTAMP</td><td>相关 Broker 分支注明暂时静默禁用，不能宣称可按任意时间回放</td></tr><tr><td>TAIL_N</td><td>该分支依赖已有位点，并从当前消费位点减 N；不是通用“最新 N 条历史”承诺</td></tr></table>
+<div class="demo"><h3>断线恢复推演</h3><p>这是语义示意，不连接 Broker，也不是运行测试。</p><div class="demo-controls"><button aria-pressed="true" data-case="same" type="button">同组接管</button><button aria-pressed="false" data-case="new" type="button">新组订阅</button><button aria-pressed="false" data-case="ttl" type="button">TTL 已清理</button></div><div aria-live="polite" id="recovery-case"><b>同一个 group + 未被清理的 LiteTopic</b><p>可从组位点继续消费；仍需检查“Broker 已 ACK”与“浏览器已展示”的差距。</p></div></div>
+<div class="callout">网关消费位点 ≠ 用户已收到的位置。若网关写出 SSE 后立即 ACK，浏览器未收到时发生断线，下一网关从组位点接管仍可能跳过这段。需要应用 eventId / 序号、客户端游标和可重放历史；不能只保存一个 sessionId。</div>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/processor/PopLiteMessageProcessor.java">getPopOffset</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/processor/PopMessageProcessor.java#L910">实际初始化分支</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/lite/LiteSubscriptionRegistryImpl.java">订阅起点处理</a> · <a href="https://rocketmq.apache.org/docs/bestPractice/03session/">官方会话接管方案</a>。浏览器 ACK 窗口为本报告故障分析。</p></section><section id="ownership"><div class="eyebrow">06 / 订阅与所有权</div><h2>Shared、Exclusive 都不能代替业务执行 fence</h2>
+<div class="grid"><article><h3>Shared</h3><p>默认允许同组多个 client 持有同一子通道订阅，竞争消费。不能把同组多个浏览器网关看成各自获得全量副本。</p></article><article><h3>Exclusive</h3><p>同组同子通道由一个 client 持有订阅；新订阅可逐出旧 client。5.5.1 通过 Broker 内存 tombstone 阻止被逐出实例继续 POP。</p></article></div>
+<p>位点按 group 管理。固定版本 reset-on-exclusive 与 reset-on-unsubscribe 默认关闭，换手通常保留组进度；不要随意重置正在工作的共享组位点。</p>
+<p>如果旧 owner 已经拿到了任务，即使其后被禁止 POP，也可能继续执行 shell、数据库写入或模型调用。Exclusive 处理消息交付归属；真正的会话推进仍需应用租约、owner_epoch、结果提交条件和稳定 operationId。</p>
+<details><summary>同一个会话有两个观察者怎么办</summary><p>同组订阅是工作分配语义，不保证两个观察者都看到全部内容。可通过一个后端消费入口向多个浏览器广播，再用业务历史服务补读；或者设计不同消费组并承担位点与订阅资源成本。</p></details>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/lite/LiteSubscriptionRegistryImpl.java">订阅注册与逐出</a> · <a href="https://github.com/apache/rocketmq/pull/10386">5.5.1 Exclusive 修复</a> · <a href="https://rocketmq.apache.org/docs/bestPractice/02ratelimit/">Shared / Exclusive 配置</a></p></section><section id="suspend"><div class="eyebrow">07 / 重试与限流</div><h2>Suspend 当前消息，意味着它还没有成功 ACK</h2>
+<table><tr><th>Java LitePush 返回值</th><th>5.2.2 的处理路径</th><th>应用意义</th></tr><tr><td>SUCCESS</td><td>ackMessage</td><td>在要求的业务结果提交后返回</td></tr><tr><td>FAILURE</td><td>按策略本地重试，耗尽后进入 DLQ 转发路径</td><td>必须接受重复尝试，并处理最终失败</td></tr><tr><td>ConsumeResultSuspend</td><td>changeInvisibleDuration；不 ACK 当前消息</td><td>延后交付，可能重复调用 listener</td></tr></table>
+<p>Java Suspend 最短为 50ms。FIFO 服务还会暂停当前批次中同 LiteTopic 的剩余消息。它让单通道退让，不是自动实现跨机器的全局 GPU 配额、公平调度或任务取消。</p>
+<div class="callout"><b>官方限流示例需要结合确认语义阅读。</b><p>示例先执行 processMessage，成功后可能返回 Suspend。固定 Java 路径没有同时 ACK，因此非幂等业务可能再次执行。更稳妥的设计是先做容量准入，未获容量时 Suspend；已提交结果返回 SUCCESS，并对重试窗口做幂等处理。</p></div>
+<pre><code>listener(message):                         # 设计伪代码，不是可直接运行的 SDK 示例
+  if operationAlreadyCommitted(message.operationId): return SUCCESS
+  if !capacity.tryAcquire(message.tenantId): return SUSPEND
+  try:
+    result = executeWithStableOperationId(message)
+    if !commitResultIfOwnerEpochMatches(result): return FAILURE
+    return SUCCESS
+  finally: capacity.release(message.tenantId)</code></pre>
+<p>长任务不宜无条件占住消费回调直到完成。可以先可靠登记任务再 ACK，由独立执行器推进；这要求任务账本承担后续恢复。若选择工作完成后 ACK，则要验证不可见时间、续租、重投与 owner 协调。</p>
+<p class="source"><a href="https://github.com/apache/rocketmq-clients/blob/6e2185bb638b639663bda240cf119804a595e099/java/client/src/main/java/org/apache/rocketmq/client/java/impl/consumer/ProcessQueueImpl.java#L528">SUCCESS / FAILURE / Suspend 分支</a> · <a href="https://github.com/apache/rocketmq-clients/blob/6e2185bb638b639663bda240cf119804a595e099/java/client/src/main/java/org/apache/rocketmq/client/java/impl/consumer/LiteFifoConsumeService.java">批次暂停</a> · <a href="https://github.com/apache/rocketmq-clients/blob/6e2185bb638b639663bda240cf119804a595e099/java/client-apis/src/main/java/org/apache/rocketmq/client/apis/consumer/ConsumeResultSuspend.java">50ms 下限</a> · <a href="https://rocketmq.apache.org/docs/bestPractice/02ratelimit/">官方限流示例</a></p></section><section id="lifecycle"><div class="eyebrow">08 / 生命周期</div><h2>空闲 TTL 不是消息保留期，也不保护积压</h2>
+<p><code>lite.topic.expiration</code> 以分钟配置，默认 <code>-1</code> 关闭空闲清理；正值的上限为 43200 分钟。5.5.1 清理器按最后入库时间判断空闲，并通过扫描执行，因此到期不是精确计时触发。</p>
+<div class="flow horizontal"><span>最后一条消息入库</span><b>→ 空闲时间超过阈值 →</b><span>扫描清理 LMQ</span><b>→</b><span>CQ / 组位点 / order info / 订阅删除</span></div>
+<p>关键实现是 <code>hasConsumerLag()</code> 直接返回 false：未消费积压和仍存在的订阅，并不构成清理保护。删除轻量索引也不能据此推断共享 CommitLog 的所有物理消息立即擦除。</p>
+<div class="grid"><article><h3>短暂响应通道</h3><p>可按最大离线恢复窗口设置 TTL，处理超时 / 已清理状态，并让客户端看到明确的恢复结果。</p></article><article><h3>长期会话历史</h3><p>另设持久历史与归档策略。关闭 Lite TTL 也不会自动关闭消息存储层的保留清理，或给出无限容量保证。Broker 还默认有 15 分钟最小保护与 2 分钟扫描；存储时间持续读取失败另有清理兜底分支。</p></article></div>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/broker/src/main/java/org/apache/rocketmq/broker/lite/AbstractLiteLifecycleManager.java">生命周期清理 / hasConsumerLag</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/common/src/main/java/org/apache/rocketmq/common/BrokerConfig.java">清理阈值与周期</a> · <a href="https://rocketmq.apache.org/docs/bestPractice/02ratelimit/">expiration 属性</a></p></section><section id="security"><div class="eyebrow">09 / 隔离与容量</div><h2>子通道有边界，租户 ACL 仍要实际验证</h2>
+<p>领域文档提出细分身份与权限；但固定版本 gRPC 的 SyncLiteSubscription 授权检查针对父 Topic 与 Group，没有独立核对子 LiteTopic 的资源权限。把租户 ID 写进名字不会自动阻止另一个具备父级权限的调用者订阅它。</p>
+<p>应用应在网关从已认证身份构造目标通道，并核对用户、团队、会话 ACL；避免任意传入子通道名、组名或通配订阅。若业务需要 Broker 直接承担子级授权，必须验证自己的授权扩展与负向测试。</p>
+<table><tr><th>容量维度</th><th>需要观测什么</th></tr><tr><td>通道数</td><td>存活 / 创建 / 删除速率、CQ 与 offset 元数据、RocksDB 内存</td></tr><tr><td>订阅数</td><td>组属性默认每 client 2000，Broker 总活动订阅引用上限默认 100000；通配展开、ready set 与扫描成本</td></tr><tr><td>吞吐</td><td>活跃通道数、热点通道、batch 与共享线程池排队</td></tr><tr><td>恢复</td><td>重连订阅延迟、积压恢复时间、位点保留与已清理响应</td></tr><tr><td>业务</td><td>首 token / 完成时间、duplicate / unknown、跨租户拒绝</td></tr></table>
+<p>“百万 LiteTopic”是官方能力目标，不是本项目测出的并发活跃任务数、吞吐或故障 SLA。逻辑独立索引共享底层资源，热点、存储和线程池仍可能互相影响。5.5.1 有 lag count / latency / collect 开关，默认关闭；积压年龄并不等于工具执行耗时或端到端 token 延迟。任务处理延迟与用户端补读完整性需要应用埋点。</p>
+<p class="source"><a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/auth/src/main/java/org/apache/rocketmq/auth/authorization/builder/DefaultAuthorizationContextBuilder.java">实际授权资源</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/common/src/main/java/org/apache/rocketmq/common/SubscriptionGroupAttributes.java">每客户端配额</a> · <a href="https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/common/src/main/java/org/apache/rocketmq/common/BrokerConfig.java">总订阅引用配额</a> · <a href="https://rocketmq.apache.org/docs/bestPractice/06access/">ACL 2.0</a> · <a href="https://rocketmq.apache.org/docs/domainModel/03litetopic/">规模与观测声明</a></p></section><section id="ai"><div class="eyebrow">10 / AI 场景</div><h2>三种用途，三份不同的状态责任</h2>
+<div class="grid"><article><h3>会话输出 / 网关换手</h3><p>每个 session 一个通道，网关可换实例接管。应用继续保存 transcript、用户游标和事件序号；后台推理要独立于浏览器连接。</p><p class="small">依据：官方 <a href="https://rocketmq.apache.org/docs/bestPractice/03session/">session 方案</a>；完整恢复约束为本报告分析。</p></article><article><h3>用户 / 模型维度准入</h3><p>按用户或任务类别组织通道，容量不足时只暂停目标维度。全局配额与公平性由共享容量服务判断；Suspend 要放在副作用前。</p><p class="small">依据：<a href="https://rocketmq.apache.org/docs/bestPractice/02ratelimit/">限流方案</a>与固定 SDK 语义。</p></article><article><h3>Supervisor / Worker 响应</h3><p>普通请求 Topic 分配工作，Lite 响应通道按 taskId 收结果。Supervisor 保存期望子任务集合、完成状态、超时与去重，不能把“收到几条消息”当成编排完成。</p><p class="small">依据：<a href="https://rocketmq.apache.org/docs/bestPractice/04multiagent/">multi-agent 方案</a>；编排责任为本报告分析。</p></article><article><h3>不自动恢复的状态</h3><p>模型上下文、工作目录、工具凭据、沙箱快照与外部副作用都在消息层之外。还需要 Harness、业务状态存储和 CubeSandbox。</p><p class="small">这是对当前项目职责边界的推断。</p></article></div>
+<p>每 token 一条消息并非必选。可以按时间或字节微批，携带 turnId、eventSeq 与 final 标记；在首 token 延迟、存储成本和可重放粒度之间做实测。消息大小、token 速率和活跃会话比例比总通道数更能说明实际负载。</p></section><section id="compare"><div class="eyebrow">11 / 与现有专题对照</div><h2>LiteTopic、JetStream、Durable Streams 应按消费契约比较</h2>
+<table><tr><th>问题</th><th>RocketMQ LiteTopic</th><th>NATS / JetStream</th><th>Durable Streams</th></tr><tr><td>核心组织</td><td>父 Topic 下大量动态子通道</td><td>Subject、Stream、Consumer</td><td>URL 寻址的 HTTP 流</td></tr><tr><td>工作分配</td><td>组位点、Shared / Exclusive、POP 与 ACK</td><td>Durable consumer、pull、ACK 与重投</td><td>普通读用客户端游标；subscription 扩展另看实现</td></tr><tr><td>浏览器补读</td><td>应用网关转换 SSE / WebSocket；组位点不等于 UI 游标</td><td>NATS WebSocket 协议或应用网关</td><td>普通 HTTP catch-up / live 读取更直接</td></tr><tr><td>生命周期</td><td>子通道空闲 TTL 与存储保留分别管理</td><td>Stream retention 与 consumer 生命周期</td><td>流保留与实现配置分别核对</td></tr><tr><td>身份隔离</td><td>已核实父 Topic / Group 授权；子级不能默认成立</td><td>Account 与 subject 权限</td><td>由 HTTP 鉴权入口与具体实现负责</td></tr><tr><td>Agent 恢复</td><td colspan="3">都需要应用状态与幂等设计；消息回放不自动等于推理或工具恢复</td></tr></table>
+<p>已有 RocketMQ 运维能力、需要大量动态响应通道时，LiteTopic 值得做专项实验。服务间消息与 worker 交付也可评估 JetStream；主要需求是浏览器历史回放时，DS 的 HTTP 契约更贴近接入面。二者或三者组合会引入多份位点、权限与保留策略，应有具体需求再拆分。</p>
+<p class="source">比较依据：本报告固定 RocketMQ 证据 · <a href="nats-jetstream-research.html">NATS / JetStream 专题</a> · <a href="durable-streams-research.html">Durable Streams 专题</a>。适用性判断是分析建议。</p></section><section id="dsh"><div class="eyebrow">12 / DSH 接入设计</div><h2>先实验响应通道，再评估任务交付与全局治理</h2>
+<p>当前 DSH + CubeSandbox 尚未接入 RocketMQ。本节是可评审方案，优先验证网关换手与后台任务解耦，避免直接替换全部任务和会话存储。</p>
+<div class="flow horizontal"><span>浏览器：sessionId + lastEventSeq</span><b>↔</b><span>已鉴权网关 / 历史补读</span><b>↔</b><span>Lite 响应通道</span><b>←</b><span>DSH owner → Cube 工具</span></div>
+<pre><code>{
+  "eventId": "stable-business-event-id",
+  "tenantId": "tenant-A",
+  "sessionId": "session-123",
+  "turnId": "turn-456",
+  "eventSeq": 42,
+  "operationId": "stable-tool-operation-id",
+  "ownerEpoch": 7,
+  "type": "tool.result",
+  "payload": {"status": "committed"}
+}</code></pre>
+<p class="small">示意 envelope；MQ messageId、业务 eventId、组位点、浏览器 eventSeq 与 ownerEpoch 各有不同用途。</p>
+<ol><li><b>先定权威：</b>持久业务记录管理会话、turn、结果与所有权；用 outbox 或明确的协调方案发布事件。</li><li><b>先订阅再启动：</b>在起点与消费组准备完成后启动实验任务，验证新组缺省、显式 MAX 与历史 MIN 三种路径。</li><li><b>控制 ACK 窗口：</b>不要将网关写出成功当成用户确认；历史服务按业务序号补缺。</li><li><b>独立执行生命周期：</b>断线只取消转发订阅，后台任务继续；用户显式取消由任务协议执行并落状态。</li><li><b>验收后再扩展：</b>测出重连、热点、幂等和容量行为后，再讨论任务队列或跨节点 owner 切换。</li></ol>
+<p>我们现有两台 Cube 主机是计算节点部署，不能据此认为已有 RocketMQ Broker 高可用。消息集群的复制、存储确认、控制组件与故障域需要另行设计和验收。</p>
+<p><a href="cubesandbox-cluster-deployment.html">当前双节点部署</a> · <a href="shared-dsh-n-tools-architecture.html">Harness 与工具环境职责</a></p></section><section id="validation"><div class="eyebrow">13 / 证据与验收</div><h2>本次是文档与固定源码调研，运行集成仍待实验</h2>
+<table><tr><th>证据</th><th>本次结果</th></tr><tr><td>第一方文档</td><td>领域模型、RIP-83、会话 / 限流 / 多 Agent 方案、ACL 文档</td></tr><tr><td>Server 固定源码</td><td>5.5.1 / efa1be59d6fc…；事件分发、订阅、起点、TTL 与授权</td></tr><tr><td>SDK 固定源码</td><td>Java 5.2.2 / 6e2185bb638b…；FIFO 分支、Suspend / ACK / DLQ</td></tr><tr><td>网页验收</td><td>页面结构、侧边栏、手机布局与发布版本单独检查</td></tr><tr><td>Broker / SDK 运行验收</td><td>未运行；没有部署到现有 DSH / Cube 主机</td></tr></table>
+<h3>应当执行的故障与负载实验</h3><ol><li>预先写消息，用新组默认起点 / MIN 订阅；检查起点与实际历史。</li><li>同组网关 A 退出、B 接管；在 SSE 写出前后和 ACK 前后断线，核对最终浏览器事件完整性。</li><li>Exclusive 换手后，让旧 owner 继续已取得的工具任务，验证业务 epoch fence。</li><li>在含积压、仍有订阅的通道上触发空闲 TTL，检查删除与恢复错误。</li><li>listener 成功后返回 Suspend，记录调用次数；再验证准入前 Suspend 与幂等提交。</li><li>测试 FIFO / Standard、失败重试、最终 DLQ、长任务不可见时间与重启恢复。</li><li>测试跨租户子名、通配订阅、超配额、ready set 溢出，以及 Broker 故障切换。</li><li>分别测总通道数、活跃通道比例、单通道热点、RocksDB 资源和端到端输出延迟。</li></ol>
+<details><summary>阅读范围与源码入口</summary><p>官方文档会继续更新，本页限定所列版本。具名代码路径确认不等于故障试验通过；容量与 HA 不采用宣传数字作为本项目结果。</p><ul><li><a href="https://rocketmq.apache.org/docs/domainModel/03litetopic/">用户给定的 LiteTopic 文档</a></li><li><a href="https://github.com/apache/rocketmq/tree/efa1be59d6fc747ad220f036c86030f05f0419f9">Server 固定快照</a></li><li><a href="https://github.com/apache/rocketmq-clients/tree/6e2185bb638b639663bda240cf119804a595e099">多语言客户端固定快照</a></li></ul></details></section></main><footer><a href="index.html#durable">返回研究资料首页</a><p>2026-10-13 · 第一方文档 + 固定源码分析 · DSH 方案为设计建议，未部署或运行验收。</p></footer></div></div><script>
+const cases={same:['同一个 group + 未被清理的 LiteTopic','可从组位点继续消费；仍需检查“Broker 已 ACK”与“浏览器已展示”的差距。'],new:['新 group + 未设置历史起点','缺省初始化路径会受首条是否仍在内存等条件影响，不能依赖它覆盖全部历史。应明确 MIN、MAX 或可用的 OFFSET。'],ttl:['子通道与位点已被 TTL 清理','重建同名通道也不能据此恢复已删的消费索引。需要历史服务补读，或向用户展示明确的恢复范围。']};
+document.querySelectorAll('[data-case]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-case]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));const [title,text]=cases[button.dataset.case];const box=document.getElementById('recovery-case');box.replaceChildren();const strong=document.createElement('b');strong.textContent=title;const p=document.createElement('p');p.textContent=text;box.append(strong,p);}));
+</script><script id="doc-sidebar-script">
+(() => {
+  const nav = document.querySelector('.doc-sidebar');
+  if (!nav) return;
+  const links = [...nav.querySelectorAll('.doc-links a')];
+  const targets = links.map(a => document.getElementById(a.hash.slice(1)));
+  function activate(id) {
+    links.forEach(a => {
+      if (a.hash === '#' + id) a.setAttribute('aria-current','location');
+      else a.removeAttribute('aria-current');
+    });
+  }
+  function jumpToSection(event, link, target) {
+    // Use the original slideshow controls so a hidden slide can be selected.
+    if (document.body.classList.contains('present') && typeof move === 'function') {
+      event.preventDefault();
+      const slides = [...document.querySelectorAll('main section')];
+      const next = slides.indexOf(target);
+      const previous = slides.findIndex(s => s.classList.contains('current'));
+      if (next >= 0) move(next - Math.max(previous,0));
+      history.replaceState(null,'',link.hash);
+    }
+    activate(target.id);
+  }
+  links.forEach((link,index) => link.addEventListener('click',event =>
+    jumpToSection(event,link,targets[index])));
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) if (entry.isIntersecting) activate(entry.target.id);
+  }, {rootMargin:'-10% 0px -60% 0px'});
+  targets.filter(Boolean).forEach(target => observer.observe(target));
+  activate(location.hash.slice(1) || targets[0]?.id);
+})();
+</script></body></html>

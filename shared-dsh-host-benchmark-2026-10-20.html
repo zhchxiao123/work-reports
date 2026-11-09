@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>共享 DSH 宿主性能测试报告 · 2026-10-20</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button>
+  <span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen" title="画笔">画笔</button>
+  <button class="ann-tool" data-tool="mark" title="荧光笔">荧光笔</button>
+  <button class="ann-tool" data-tool="eraser" title="橡皮擦">橡皮擦</button>
+  <span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757" title="颜色">
+  <input type="range" id="annSize" min="2" max="26" value="4" title="粗细">
+  <span class="sep"></span>
+  <button id="annUndo">撤销</button>
+  <button id="annClear">清空</button>
+  <button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch" title="展开标注工具">✎ 标注</button>
+
+<div class="sheet">
+
+  <aside class="sidenav">
+    <a class="doc-home" href="index.html">← 研究资料首页</a>
+    <div class="brand">
+      <div class="brand-eyebrow">性能测试报告</div>
+      <div class="brand-title">共享 DSH 宿主<br>内存与首词响应</div>
+      <div class="brand-sub">220 e2e · 2026-10-20</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#sec-summary" data-sec="sec-summary"><span class="num">01</span><span>结论</span></a>
+      <a href="#sec-setup" data-sec="sec-setup"><span class="num">02</span><span>环境与口径</span></a>
+      <a href="#sec-mem" data-sec="sec-mem"><span class="num">03</span><span>内存占用</span></a>
+      <a href="#sec-ttft" data-sec="sec-ttft"><span class="num">04</span><span>首词响应时间</span></a>
+      <a href="#sec-conc" data-sec="sec-conc"><span class="num">05</span><span>多用户并发</span></a>
+      <a href="#sec-ten" data-sec="sec-ten"><span class="num">06</span><span>扩展到 10 个用户</span></a>
+      <a href="#sec-issue" data-sec="sec-issue"><span class="num">07</span><span>发现的问题</span></a>
+      <a href="#sec-repro" data-sec="sec-repro"><span class="num">08</span><span>复现方法</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 正文连续滚动 · 右侧可圈画标注</div>
+  </aside>
+
+  <main class="main">
+
+  <header>
+    <div class="eyebrow">ByClaw · DSH 0.2.1 · 共享宿主 v2</div>
+    <h1>共享 DSH 宿主性能测试报告</h1>
+    <p class="lead">一个 Node 进程承载多个用户的 DSH 上下文，工具在每个用户自己的沙箱 B 里执行。本报告回答七个问题：宿主在 0、1、2、3 个用户时各占多少内存；首次需要工具调用、工具环境已启动两种情况下的首词响应时间；以及多个用户同时对话时首词是否变慢。全部数据来自 220 e2e 环境的真实登录与对话。</p>
+  </header>
+
+  <section id="sec-summary" style="margin-top:4px">
+    <h2><span class="n">01</span>结论</h2>
+    <p class="sub">先给答案，细节在后面各节。</p>
+
+    <div class="thesis">
+      <div class="t-kicker">一句话</div>
+      <div class="t-main">第一个用户让宿主从 <em>82 MB</em> 涨到 <em>380 MB</em>，之后每多一个用户只多 <em>25 到 50 MB</em>；工具环境冷启动让首词晚约 <em>2.5 秒</em>，三个用户同时对话首词<em>不变慢</em>；扩到 10 个用户宿主只用 <em>650 MB</em>，但 220 这台机器先撑不住了。</div>
+      <p><strong>内存</strong>：插件和 profile 在第一个上下文时一次性载入，后续用户只付上下文本身的代价。跑完约 40 轮对话后进程稳定在 490 到 530 MB。</p>
+      <p><strong>首词</strong>：不需要工具的对话 0.4 秒出第一个字；B 已在运行时 0.6 秒；B 空闲暂停后唤醒 1.9 秒；B 从零创建 3.1 秒。冷启动的代价发生在模型调用之前，因为会话目录和技能要先从 B 取。</p>
+      <p><strong>并发</strong>：1、2、3 个用户同时发起带工具的对话，首词中位数分别为 611、361、479 毫秒，差异在模型自身的波动范围内。</p>
+      <p><strong>10 个用户</strong>：宿主进程 649 MB，每用户约 28 MB；5 个用户同时对话首词 0.9 秒，10 个同时 1.5 秒。10 个 B 同时从零创建要 19 秒才出首词，瓶颈在 OpenSandbox 建容器。之后测试机内存耗尽进入抖动，后续 10 用户数据不可信，详见第 06、07 节。</p>
+    </div>
+
+    <div class="stats" style="margin-top:16px">
+      <div class="stat"><div class="s-num">82<em> MB</em></div><div class="s-lab">空载宿主进程</div><div class="s-sub">两轮：81 / 83</div></div>
+      <div class="stat hot"><div class="s-num">+300<em> MB</em></div><div class="s-lab">第一个用户</div><div class="s-sub">之后每用户 +25~50</div></div>
+      <div class="stat"><div class="s-num">0.6<em> s</em></div><div class="s-lab">热态首词</div><div class="s-sub">B 已运行，中位数</div></div>
+      <div class="stat hot"><div class="s-num">3.1<em> s</em></div><div class="s-lab">冷启动首词</div><div class="s-sub">B 从零创建，中位数</div></div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>数字要有对照才有意义。</b><span class="to">↓　先说清楚在什么环境、用什么口径测的。</span></div>
+
+  <section id="sec-setup">
+    <h2><span class="n">02</span>环境与口径</h2>
+    <p class="sub">所有对话都从 BE 的 WebSocket 发起，与前端页面走同一条链路；时间戳打在客户端收到每一帧的时刻。</p>
+
+    <figure>
+      <div class="fig-h">图 1 · 被测链路<span>登录 → BE → 共享宿主 → 用户上下文 → 沙箱 B</span></div>
+      <svg class="rf" viewBox="0 0 760 236" role="img" aria-label="被测链路：测试脚本经 BE 到共享宿主的三个用户上下文，每个上下文连接自己的沙箱 B">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+        </defs>
+        <rect class="box-d" x="14" y="80" width="118" height="54" rx="8"/>
+        <text x="73" y="102" text-anchor="middle" style="fill:#141413;font-weight:600">测试脚本</text>
+        <text x="73" y="119" class="tiny" text-anchor="middle" style="fill:#3D3D3A">bench-chat.mjs</text>
+        <path class="ln" d="M134,107 L160,107" marker-end="url(#ar)"/>
+        <rect class="box-d" x="164" y="80" width="112" height="54" rx="8"/>
+        <text x="220" y="102" text-anchor="middle" style="fill:#141413;font-weight:600">BE</text>
+        <text x="220" y="119" class="tiny" text-anchor="middle" style="fill:#3D3D3A">WebSocket · 登录即 PUT</text>
+        <path class="ln" d="M278,107 L304,107" marker-end="url(#ar)"/>
+        <rect class="box-ok" x="308" y="18" width="214" height="200" rx="10"/>
+        <text x="415" y="40" text-anchor="middle" style="fill:#141413;font-weight:600">共享宿主 A（一个 Node 进程）</text>
+        <text x="415" y="55" class="tiny" text-anchor="middle" style="fill:#3D3D3A">byclaw/dsh:0.2.1-multi2 · 内存在这里量</text>
+        <rect class="box" x="326" y="70" width="178" height="38" rx="7"/>
+        <text x="415" y="93" text-anchor="middle" class="lab" style="fill:#141413">上下文 用户B</text>
+        <rect class="box" x="326" y="118" width="178" height="38" rx="7"/>
+        <text x="415" y="141" text-anchor="middle" class="lab" style="fill:#141413">上下文 用户A</text>
+        <rect class="box" x="326" y="166" width="178" height="38" rx="7"/>
+        <text x="415" y="189" text-anchor="middle" class="lab" style="fill:#141413">上下文 用户C</text>
+        <path class="ln" d="M506,89 L560,89" marker-end="url(#ar)"/>
+        <path class="ln" d="M506,137 L560,137" marker-end="url(#ar)"/>
+        <path class="ln" d="M506,185 L560,185" marker-end="url(#ar)"/>
+        <rect class="box-x" x="564" y="70" width="180" height="38" rx="7"/>
+        <text x="654" y="93" text-anchor="middle" class="lab" style="fill:#141413">B · 沙箱 1（SSH）</text>
+        <rect class="box-x" x="564" y="118" width="180" height="38" rx="7"/>
+        <text x="654" y="141" text-anchor="middle" class="lab" style="fill:#141413">B · 沙箱 2（SSH）</text>
+        <rect class="box-x" x="564" y="166" width="180" height="38" rx="7"/>
+        <text x="654" y="189" text-anchor="middle" class="lab" style="fill:#141413">B · 沙箱 3（SSH）</text>
+        <text x="14" y="226" class="tiny" style="fill:#87867F">绿底 = 内存测量对象 · 橙底 = 工具执行环境，每用户一个，空闲 180 秒后暂停 · 模型 deepseek-flash</text>
+      </svg>
+      <figcaption><b>内存只统计宿主 A 的 node 主进程</b>；B 是独立容器，浏览器 browserd 也是独立子进程，只在用到浏览器工具时启动，都不计入。</figcaption>
+    </figure>
+
+    <div class="g2">
+      <div class="card">
+        <h3>首词的三个时刻</h3>
+        <div class="tag">从发出消息那一刻起计时，单位毫秒</div>
+        <p><b>首个模型输出</b>：第一帧带内容的流，通常是思考过程的第一个字。这是用户第一次看到“在动”。</p>
+        <p style="margin-top:8px"><b>首个回答字</b>：工具跑完后正式回答的第一个字。</p>
+        <p style="margin-top:8px"><b>整轮结束</b>：收到 <code>appStreamResponse</code>。</p>
+      </div>
+      <div class="card">
+        <h3>四种工具环境状态</h3>
+        <div class="tag">同一条提示词：用 bash 执行 hostname，只回复输出</div>
+        <p><b>无工具</b>：提示词“只回复一个字：好”，作模型基线。</p>
+        <p style="margin-top:8px"><b>冷</b>：B 被删除，本轮要创建容器、起 sshd、连上。</p>
+        <p style="margin-top:8px"><b>空闲暂停</b>：B 由工具环境自己因空闲暂停，本轮唤醒。</p>
+        <p style="margin-top:8px"><b>热</b>：B 正在运行。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>口径定了。</b><span class="to">↓　第一个问题：宿主随用户数怎么长。</span></div>
+
+  <section id="sec-mem">
+    <h2><span class="n">03</span>内存占用（问题 1 到 4）</h2>
+    <p class="sub">每次测量前先释放全部用户并重启宿主，然后逐个登录；每登录一个等 25 秒再读 RSS。整套跑了两轮，结果一致。</p>
+
+    <figure>
+      <div class="fig-h">图 2 · 宿主 node 主进程 RSS<span>MB · 两轮取第一轮，括号内为第二轮</span></div>
+      <svg class="rf" viewBox="0 0 760 236" role="img" aria-label="内存柱状图：0 用户 81 MB，1 用户 382，2 用户 432，3 用户 420，40 轮对话后 529">
+        <line class="base" x1="150" y1="18" x2="150" y2="206"/>
+        <g>
+          <text x="140" y="42" text-anchor="end" class="lab">空载 · 0 用户</text>
+          <rect class="bar-n" x="150" y="28" width="72" height="22" rx="3"/>
+          <text x="230" y="43" class="mono" style="fill:#141413">81（83）</text>
+        </g>
+        <g>
+          <text x="140" y="80" text-anchor="end" class="lab">1 用户</text>
+          <rect class="bar-x" x="150" y="66" width="339" height="22" rx="3"/>
+          <text x="497" y="81" class="mono" style="fill:#141413">382（380）</text>
+        </g>
+        <g>
+          <text x="140" y="118" text-anchor="end" class="lab">2 用户</text>
+          <rect class="bar-x" x="150" y="104" width="384" height="22" rx="3"/>
+          <text x="542" y="119" class="mono" style="fill:#141413">432（431）</text>
+        </g>
+        <g>
+          <text x="140" y="156" text-anchor="end" class="lab">3 用户</text>
+          <rect class="bar-x" x="150" y="142" width="373" height="22" rx="3"/>
+          <text x="531" y="157" class="mono" style="fill:#141413">420（419）</text>
+        </g>
+        <g>
+          <text x="140" y="194" text-anchor="end" class="lab">3 用户 · 40 轮对话后</text>
+          <rect class="bar-ok" x="150" y="180" width="470" height="22" rx="3"/>
+          <text x="628" y="195" class="mono" style="fill:#141413">492 ~ 529</text>
+        </g>
+        <text x="150" y="226" class="tiny" style="fill:#87867F">0</text>
+        <text x="372" y="226" class="tiny" style="fill:#87867F">250 MB</text>
+        <text x="594" y="226" class="tiny" style="fill:#87867F">500 MB</text>
+      </svg>
+      <figcaption><b>台阶在第一个用户</b>：插件、managed profile、Web 栈全部在第一个上下文时载入；第二、第三个用户只多出上下文本身。3 用户读数低于 2 用户是 GC 时机造成的抖动，不是真的变少。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:22%">用户数</th><th class="num">主进程 RSS</th><th class="num">容器全部进程</th><th class="num">cgroup</th><th>说明</th></tr>
+        <tr><td>0（空载）</td><td class="num">81 / 83</td><td class="num">89 / 89</td><td class="num">36 / 34</td><td>宿主只跑管理 API 和网关</td></tr>
+        <tr><td>1</td><td class="num">382 / 380</td><td class="num">399 / 397</td><td class="num">401 / 381</td><td>首个上下文载入全部插件</td></tr>
+        <tr><td>2</td><td class="num">432 / 431</td><td class="num">458 / 457</td><td class="num">465 / 443</td><td>+50 MB</td></tr>
+        <tr><td>3</td><td class="num">420 / 419</td><td class="num">455 / 453</td><td class="num">453 / 385</td><td>GC 抖动，净增 25 到 50 MB 量级</td></tr>
+        <tr><td>3 · 对话后</td><td class="num">492 ~ 529</td><td class="num">—</td><td class="num">533</td><td>约 40 轮对话、3 个用户的会话缓存</td></tr>
+      </table>
+      <div class="delta"><b>按这个曲线估算</b>：一台 4 GB 内存给宿主的机器，扣掉第一个用户的 400 MB 后，按每用户 50 MB 加上会话增长，可承载几十个用户；真正的上限由 B 的数量和模型并发决定，而不是宿主。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>内存不是瓶颈。</b><span class="to">↓　用户更关心的是：第一个字多久出来。</span></div>
+
+  <section id="sec-ttft">
+    <h2><span class="n">04</span>首词响应时间（问题 5 和 6）</h2>
+    <p class="sub">每种状态 3 个用户各跑一轮（热态跑两轮），取中位数。冷启动前通过 OpenSandbox API 删除 B；空闲暂停是等工具环境自己暂停后再发消息。</p>
+
+    <figure>
+      <div class="fig-h">图 3 · 四种状态下的首词时间<span>毫秒 · 中位数 · 深色 = 首个模型输出，浅色 = 首个回答字</span></div>
+      <svg class="rf" viewBox="0 0 760 250" role="img" aria-label="首词时间柱状图：无工具 382 与 1698；冷启动 3129 与 5763；空闲暂停 1873 与 4774；热态 585 与 3564">
+        <line class="base" x1="150" y1="14" x2="150" y2="218"/>
+        <g>
+          <text x="140" y="36" text-anchor="end" class="lab">无工具（基线）</text>
+          <rect class="bar-x" x="150" y="22" width="38" height="12" rx="2"/>
+          <text x="194" y="32" class="mono" style="fill:#141413">382</text>
+          <rect class="bar-n" x="150" y="36" width="170" height="12" rx="2"/>
+          <text x="326" y="46" class="mono" style="fill:#3D3D3A">1698</text>
+        </g>
+        <g>
+          <text x="140" y="86" text-anchor="end" class="lab">冷 · B 从零创建</text>
+          <rect class="bar-x" x="150" y="72" width="313" height="12" rx="2"/>
+          <text x="469" y="82" class="mono" style="fill:#B04A3F;font-weight:600">3129</text>
+          <rect class="bar-n" x="150" y="86" width="576" height="12" rx="2"/>
+          <text x="690" y="110" class="mono" style="fill:#3D3D3A">5763</text>
+        </g>
+        <g>
+          <text x="140" y="136" text-anchor="end" class="lab">空闲暂停后唤醒</text>
+          <rect class="bar-x" x="150" y="122" width="187" height="12" rx="2"/>
+          <text x="343" y="132" class="mono" style="fill:#141413">1873</text>
+          <rect class="bar-n" x="150" y="136" width="477" height="12" rx="2"/>
+          <text x="633" y="146" class="mono" style="fill:#3D3D3A">4774</text>
+        </g>
+        <g>
+          <text x="140" y="186" text-anchor="end" class="lab">热 · B 已运行</text>
+          <rect class="bar-ok" x="150" y="172" width="59" height="12" rx="2"/>
+          <text x="215" y="182" class="mono" style="fill:#788C5D;font-weight:600">585</text>
+          <rect class="bar-n" x="150" y="186" width="356" height="12" rx="2"/>
+          <text x="512" y="196" class="mono" style="fill:#3D3D3A">3564</text>
+        </g>
+        <text x="150" y="238" class="tiny" style="fill:#87867F">0</text>
+        <text x="350" y="238" class="tiny" style="fill:#87867F">2 s</text>
+        <text x="550" y="238" class="tiny" style="fill:#87867F">4 s</text>
+        <text x="730" y="238" class="tiny" text-anchor="end" style="fill:#87867F">6 s</text>
+      </svg>
+      <figcaption><b>冷启动的 2.5 秒落在模型调用之前</b>：本轮的会话目录要在 B 上创建、技能要从 B 读取，所以首个模型输出从 0.6 秒推迟到 3.1 秒，而不只是工具那一步变慢。暂停唤醒比冷启动快约 1.2 秒。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:24%">场景</th><th class="num">首个模型输出</th><th class="num">首个回答字</th><th class="num">整轮结束</th><th>每个用户（输出 / 回答 / 结束）</th></tr>
+        <tr><td>无工具（基线）</td><td class="num">382</td><td class="num">1698</td><td class="num">1713</td><td class="col-old">527/2100/2118 · 382/1698/1713 · 373/1439/1454</td></tr>
+        <tr><td>冷 · B 从零创建</td><td class="num warn">3129</td><td class="num">5763</td><td class="num">5778</td><td class="col-old">3129/5763/5778 · 3377/6264/6278 · 2876/5511/5528</td></tr>
+        <tr><td>空闲暂停后唤醒</td><td class="num">1873</td><td class="num">4774</td><td class="num">4788</td><td class="col-old">1873/4774/4788 · 1867/4753/4784 · 2732/5704/5717</td></tr>
+        <tr><td>热 · B 已运行（6 轮）</td><td class="num good">585</td><td class="num">3564</td><td class="num">3578</td><td class="col-old">1703/4341 · 242/2646 · 1949/4838 · 867/3753 · 304/2692 · 209/3376</td></tr>
+      </table>
+      <div class="delta"><b>热态首个输出在 209 到 1949 毫秒之间波动</b>，这是模型思考长短的差异，与宿主无关；对比时看中位数，不看单次。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>单用户的数字有了。</b><span class="to">↓　多个用户同时对话会不会互相拖慢？</span></div>
+
+  <section id="sec-conc">
+    <h2><span class="n">05</span>多用户并发（问题 7）</h2>
+    <p class="sub">B 全部预热后，同一条带工具的提示词：1 个用户单独发、2 个用户同时发、3 个用户同时发，各重复两轮。</p>
+
+    <figure>
+      <div class="fig-h">图 4 · 同时对话的用户数与首词<span>毫秒 · 中位数</span></div>
+      <svg class="rf" viewBox="0 0 760 196" role="img" aria-label="并发柱状图：1 用户 611 与 2875，2 用户 361 与 2693，3 用户 479 与 3079">
+        <line class="base" x1="150" y1="14" x2="150" y2="166"/>
+        <g>
+          <text x="140" y="36" text-anchor="end" class="lab">1 个用户（2 轮）</text>
+          <rect class="bar-ok" x="150" y="22" width="92" height="12" rx="2"/>
+          <text x="248" y="32" class="mono" style="fill:#141413">611</text>
+          <rect class="bar-n" x="150" y="36" width="431" height="12" rx="2"/>
+          <text x="587" y="46" class="mono" style="fill:#3D3D3A">2875</text>
+        </g>
+        <g>
+          <text x="140" y="86" text-anchor="end" class="lab">2 个用户同时（4 轮）</text>
+          <rect class="bar-ok" x="150" y="72" width="54" height="12" rx="2"/>
+          <text x="210" y="82" class="mono" style="fill:#141413">361</text>
+          <rect class="bar-n" x="150" y="86" width="404" height="12" rx="2"/>
+          <text x="560" y="96" class="mono" style="fill:#3D3D3A">2693</text>
+        </g>
+        <g>
+          <text x="140" y="136" text-anchor="end" class="lab">3 个用户同时（6 轮）</text>
+          <rect class="bar-ok" x="150" y="122" width="72" height="12" rx="2"/>
+          <text x="228" y="132" class="mono" style="fill:#141413">479</text>
+          <rect class="bar-n" x="150" y="136" width="462" height="12" rx="2"/>
+          <text x="618" y="146" class="mono" style="fill:#3D3D3A">3079</text>
+        </g>
+        <text x="150" y="186" class="tiny" style="fill:#87867F">0</text>
+        <text x="450" y="186" class="tiny" style="fill:#87867F">2 s</text>
+        <text x="730" y="186" class="tiny" text-anchor="end" style="fill:#87867F">4 s</text>
+      </svg>
+      <figcaption><b>三个用户同时对话，首词没有变慢</b>。三组的差异（611 / 361 / 479）小于单用户热态自身的波动区间，宿主在这个规模下没有排队。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:24%">同时对话的用户数</th><th class="num">首个模型输出</th><th class="num">首个回答字</th><th>每轮（用户：输出 / 回答）</th></tr>
+        <tr><td>1</td><td class="num">611</td><td class="num">2875</td><td class="col-old">用户B 947/3335 · 276/2416</td></tr>
+        <tr><td>2</td><td class="num">361</td><td class="num">2693</td><td class="col-old">用户A 241/2636 · 用户B 1618/5285 · 用户A 359/2246 · 用户B 364/2751</td></tr>
+        <tr><td>3</td><td class="num">479</td><td class="num">3079</td><td class="col-old">用户B 234/2371 · 用户C 619/2766 · 用户A 939/3077 · 用户A 442/3081 · 用户C 397/3306 · 用户B 517/3405</td></tr>
+      </table>
+      <div class="delta"><b>限制</b>：本次只验证到 3 个用户，机器是 8 核 15 GB 并同时跑着整套 e2e 栈。更大规模要单独压，瓶颈更可能出现在模型并发和 B 的数量上。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>3 个用户看不出上限。</b><span class="to">↓　加到 10 个用户再看一次。</span></div>
+
+  <section id="sec-ten">
+    <h2><span class="n">06</span>扩展到 10 个用户</h2>
+    <p class="sub">新开 7 个用户（张三丰、令狐冲、韦小宝、胡斐、陈家洛、狄云、杨过），个人助理同样指向 deepseek-flash。流程与前面一致：释放全部用户、重启宿主、逐个登录读内存，然后跑热态、并发和 10 路同时冷启动。</p>
+
+    <figure>
+      <div class="fig-h">图 5 · 0 到 10 个用户的宿主进程 RSS<span>MB · 单轮 · 末柱为约 60 轮对话后</span></div>
+      <svg class="rf" viewBox="0 0 760 236" role="img" aria-label="内存曲线：0 用户 80 MB，1 用户 374，之后每用户约 28 MB，10 用户 649，对话后 892">
+        <line class="base" x1="60" y1="20" x2="60" y2="186"/>
+        <line class="base" x1="60" y1="186" x2="740" y2="186"/>
+        <text x="52" y="190" text-anchor="end" class="tiny" style="fill:#87867F">0</text>
+        <text x="52" y="107" text-anchor="end" class="tiny" style="fill:#87867F">500</text>
+        <text x="52" y="24" text-anchor="end" class="tiny" style="fill:#87867F">1000</text>
+        <line x1="60" y1="103" x2="740" y2="103" stroke="#F0EEE6" stroke-width="1"/>
+        <!-- bars: x step 56, width 36; height = mb*0.166 -->
+        <rect class="bar-n"  x="76"  y="172.7" width="36" height="13.3" rx="3"/><text x="94"  y="166" text-anchor="middle" class="mono" style="fill:#141413">80</text>
+        <rect class="bar-x"  x="132" y="123.9" width="36" height="62.1" rx="3"/><text x="150" y="118" text-anchor="middle" class="mono" style="fill:#141413">374</text>
+        <rect class="bar-x"  x="188" y="114.1" width="36" height="71.9" rx="3"/><text x="206" y="108" text-anchor="middle" class="mono" style="fill:#141413">433</text>
+        <rect class="bar-x"  x="244" y="108.6" width="36" height="77.4" rx="3"/><text x="262" y="102" text-anchor="middle" class="mono" style="fill:#141413">466</text>
+        <rect class="bar-x"  x="300" y="104.3" width="36" height="81.7" rx="3"/><text x="318" y="98"  text-anchor="middle" class="mono" style="fill:#141413">492</text>
+        <rect class="bar-x"  x="356" y="100.0" width="36" height="86.0" rx="3"/><text x="374" y="94"  text-anchor="middle" class="mono" style="fill:#141413">518</text>
+        <rect class="bar-x"  x="412" y="97.5"  width="36" height="88.5" rx="3"/><text x="430" y="91"  text-anchor="middle" class="mono" style="fill:#141413">533</text>
+        <rect class="bar-x"  x="468" y="91.9"  width="36" height="94.1" rx="3"/><text x="486" y="86"  text-anchor="middle" class="mono" style="fill:#141413">567</text>
+        <rect class="bar-x"  x="524" y="94.5"  width="36" height="91.5" rx="3"/><text x="542" y="88"  text-anchor="middle" class="mono" style="fill:#141413">551</text>
+        <rect class="bar-x"  x="580" y="83.7"  width="36" height="102.3" rx="3"/><text x="598" y="78" text-anchor="middle" class="mono" style="fill:#141413">616</text>
+        <rect class="bar-x"  x="636" y="78.3"  width="36" height="107.7" rx="3"/><text x="654" y="72" text-anchor="middle" class="mono" style="fill:#141413">649</text>
+        <rect class="bar-ok" x="692" y="37.9"  width="36" height="148.1" rx="3"/><text x="710" y="32" text-anchor="middle" class="mono" style="fill:#141413">892</text>
+        <text x="94"  y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">0</text>
+        <text x="150" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">1</text>
+        <text x="206" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">2</text>
+        <text x="262" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">3</text>
+        <text x="318" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">4</text>
+        <text x="374" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">5</text>
+        <text x="430" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">6</text>
+        <text x="486" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">7</text>
+        <text x="542" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">8</text>
+        <text x="598" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">9</text>
+        <text x="654" y="204" text-anchor="middle" class="tiny" style="fill:#3D3D3A">10</text>
+        <text x="710" y="204" text-anchor="middle" class="tiny" style="fill:#788C5D">10·对话后</text>
+        <text x="400" y="226" text-anchor="middle" class="tiny" style="fill:#87867F">横轴：用户数 · 纵轴：MB · 第一个用户 +294 MB，之后平均每个用户 +28 MB</text>
+      </svg>
+      <figcaption><b>曲线从第二个用户起几乎是直线</b>：10 个用户 649 MB，与 3 个用户时推算的每用户 25 到 50 MB 一致。对话后涨到 892 MB 是会话缓存，与用户数无关。另外每个 B 容器约 40 MB，10 个 B 合计 1.15 GB，这部分不在宿主进程里。</figcaption>
+    </figure>
+
+    <figure>
+      <div class="fig-h">图 6 · 1、3、5、10 个用户同时对话的首词<span>毫秒 · 中位数 · B 已预热 · 深色 = 首个模型输出，浅色 = 首个回答字</span></div>
+      <svg class="rf" viewBox="0 0 760 250" role="img" aria-label="并发柱状图：1 用户 321 与 3246，3 用户 478 与 3052，5 用户 905 与 3311，10 用户 1513 与 5427">
+        <line class="base" x1="150" y1="14" x2="150" y2="218"/>
+        <g>
+          <text x="140" y="36" text-anchor="end" class="lab">1 个用户（2 轮）</text>
+          <rect class="bar-ok" x="150" y="22" width="32" height="12" rx="2"/><text x="188" y="32" class="mono" style="fill:#141413">321</text>
+          <rect class="bar-n" x="150" y="36" width="325" height="12" rx="2"/><text x="481" y="46" class="mono" style="fill:#3D3D3A">3246</text>
+        </g>
+        <g>
+          <text x="140" y="86" text-anchor="end" class="lab">3 个同时（6 轮）</text>
+          <rect class="bar-ok" x="150" y="72" width="48" height="12" rx="2"/><text x="204" y="82" class="mono" style="fill:#141413">478</text>
+          <rect class="bar-n" x="150" y="86" width="305" height="12" rx="2"/><text x="461" y="96" class="mono" style="fill:#3D3D3A">3052</text>
+        </g>
+        <g>
+          <text x="140" y="136" text-anchor="end" class="lab">5 个同时（10 轮）</text>
+          <rect class="bar-ok" x="150" y="122" width="91" height="12" rx="2"/><text x="247" y="132" class="mono" style="fill:#141413">905</text>
+          <rect class="bar-n" x="150" y="136" width="331" height="12" rx="2"/><text x="487" y="146" class="mono" style="fill:#3D3D3A">3311</text>
+        </g>
+        <g>
+          <text x="140" y="186" text-anchor="end" class="lab">10 个同时（20 轮）</text>
+          <rect class="bar-x" x="150" y="172" width="151" height="12" rx="2"/><text x="307" y="182" class="mono" style="fill:#B04A3F;font-weight:600">1513</text>
+          <rect class="bar-n" x="150" y="186" width="543" height="12" rx="2"/><text x="699" y="196" class="mono" style="fill:#3D3D3A">5427</text>
+        </g>
+        <text x="150" y="238" class="tiny" style="fill:#87867F">0</text>
+        <text x="350" y="238" class="tiny" style="fill:#87867F">2 s</text>
+        <text x="550" y="238" class="tiny" style="fill:#87867F">4 s</text>
+        <text x="730" y="238" class="tiny" text-anchor="end" style="fill:#87867F">6 s</text>
+      </svg>
+      <figcaption><b>5 个用户同时对话还看不出明显变慢，10 个同时首词到 1.5 秒</b>。这组数据在测试机负载还正常时（load 2.4）测得。随后机器进入内存抖动，再测的 10 路并发首词 3 到 7 秒，连不碰工具的纯模型对话也一样慢，所以无法把 10 路的变慢归到宿主上，见第 07 节。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:26%">场景</th><th class="num">首个模型输出</th><th class="num">首个回答字</th><th class="num">整轮结束</th><th>说明</th></tr>
+        <tr><td>热态 · 10 用户逐个发（20 轮）</td><td class="num good">359</td><td class="num">2916</td><td class="num">2931</td><td>与 3 用户时一致</td></tr>
+        <tr><td>5 个同时</td><td class="num">905</td><td class="num">3311</td><td class="num">3323</td><td>机器负载正常</td></tr>
+        <tr><td>10 个同时</td><td class="num warn">1513</td><td class="num">5427</td><td class="num">5440</td><td>机器负载正常；宿主 CPU 峰值约 1.2 核</td></tr>
+        <tr><td>10 个 B 同时从零创建</td><td class="num warn">18779</td><td class="num">23104</td><td class="num">23395</td><td>OpenSandbox 每 5 秒返回一批创建：+4.5 s 1 个，+9 s 5 个，+14 s 2 个，+19 s 2 个；首词 ≈ 创建完成 + 2.5 s</td></tr>
+      </table>
+      <div class="delta"><b>10 路同时冷启动的 19 秒不在宿主</b>：10 个容器同时创建时 OpenSandbox 分批返回，先建好的用户（张三丰）12 秒出首词，最后一批 20 秒。按天早上集中登录的场景，这一步要么提前预热 B，要么让 OpenSandbox 并行建容器。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>宿主本身没有碰到上限。</b><span class="to">↓　但测试过程暴露了两个需要记下来的问题。</span></div>
+
+  <section id="sec-issue">
+    <h2><span class="n">07</span>发现的问题</h2>
+    <p class="sub">两个问题：一个是工具环境被外部暂停时的边界情况，一个是 10 用户测试暴露的测试机瓶颈。</p>
+
+    <div class="card">
+      <h3>B 被外部暂停后 5 秒内对话，一半的轮次空回答</h3>
+      <div class="tag">状态 <span class="badge part">边界情况</span>　触发条件：通过 OpenSandbox API 暂停 B，而不是工具环境自己因空闲暂停</div>
+      <table>
+        <tr><th style="width:34%">场景</th><th class="num">清洁轮次</th><th>表现</th></tr>
+        <tr><td>外部暂停后 5 秒发消息</td><td class="num warn">3 / 6</td><td>空回答，耗时 8 到 15 秒，worker 报 <code>SSH operation cancelled</code></td></tr>
+        <tr><td>外部暂停后 20 秒发消息</td><td class="num good">3 / 3</td><td>正常，3.0 到 5.3 秒</td></tr>
+        <tr><td>工具环境自己空闲暂停后唤醒</td><td class="num good">3 / 3</td><td>正常，见第 04 节</td></tr>
+      </table>
+      <div class="delta"><b>原因</b>：工具环境只在 SSH 连接断开时才察觉 B 不可用；外部刚暂停时 TCP 连接还在，第一个远程操作挂到超时才被取消。<b>建议</b>：远程操作卡住超过若干秒时，主动查一次沙箱状态，发现已暂停就直接走唤醒。生产路径里 B 都由工具环境自己暂停，所以当前不受影响。</div>
+    </div>
+  </section>
+
+
+    <div class="card" style="margin-top:16px">
+      <h3>220 测试机在 10 用户时内存耗尽，后续数据失真</h3>
+      <div class="tag">状态 <span class="badge part">环境限制</span>　15 GB 内存、无 swap、同时跑着整套 e2e 和 byclaw-direct 栈</div>
+      <table>
+        <tr><th style="width:34%">观测</th><th>数值</th></tr>
+        <tr><td>加 10 用户前后的可用内存</td><td>2.3 GB → 1.3 GB（宿主 +0.8 GB，10 个 B 容器 +1.15 GB）</td></tr>
+        <tr><td>并发对话时的系统负载</td><td>load 2.4 → 18 到 19，iowait 71% 到 85%，磁盘 vda 100% 忙、读 130 MB/s</td></tr>
+        <tr><td>读盘的来源</td><td>宿主、BE、gaussdb、mysql、coredns 各 50 到 100 MB，分散在所有容器：是页缓存被挤掉后的整机抖动，不是某个进程在读</td></tr>
+        <tr><td>抖动期间 10 路纯模型对话（不碰工具）</td><td class="warn">首词 7.5 s → 5.4 s → 3.2 s，随负载回落而下降；单用户基线 0.4 s</td></tr>
+        <tr><td>宿主进程自身</td><td class="good">813 到 892 MB，CPU 峰值约 1.2 核（机器 8 核）</td></tr>
+      </table>
+      <div class="delta"><b>结论</b>：10 用户的瓶颈是这台测试机，不是共享宿主。要拿到可信的 10 用户以上并发数据，需要一台内存不被其他栈占满的机器，或者先停掉 220 上无关的栈。<b>建议</b>：生产上按“宿主 400 MB + 每用户 30 MB + 每个 B 约 40 MB”预留内存，并给 B 设更短的空闲暂停时间以释放容器内存。</div>
+    </div>
+
+  <div class="bridge"><b>所有数据都可以复跑。</b><span class="to">↓　脚本和原始数据都留在 220 上。</span></div>
+
+  <section id="sec-repro">
+    <h2><span class="n">08</span>复现方法</h2>
+    <p class="sub">文件都在 220 的 <code>[构建目录]/</code> 下，按阶段分开跑，每个阶段几分钟。</p>
+
+    <ol class="trace">
+      <li>
+        <div class="tr-head"><span class="tr-stage">准备</span><b>三个用户登录到同一个状态文件</b></div>
+        <div class="tr-body"><p>10 个用户的个人助理都指向模型 10000542（deepseek-flash）。用户C 和后加的 7 个用户是本次新开的，原模型备份在 <code>restore/employee-&lt;id&gt;.orig.tsv</code>。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">内存</span><b>bench.sh mem</b></div>
+        <div class="tr-body"><p>释放全部用户，重启宿主，等 45 秒读空载；再逐个登录，各等 25 秒读一次。</p>
+        <p class="tr-block">bash bench.sh mem</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">首词</span><b>bench.sh baseline / cold / paused / warm</b></div>
+        <div class="tr-body"><p>cold 先用 OpenSandbox API 删除三个 B；paused 先用 API 暂停。空闲暂停场景是等 180 秒后用 <code>bench-idle.sh paused</code>。</p>
+        <p class="tr-block">for p in baseline cold paused warm; do bash bench.sh $p; done</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">并发</span><b>bench.sh concurrent</b></div>
+        <div class="tr-body"><p>先给三个用户各跑一轮预热，再按 1、2、3 用户同时发消息，重复两轮。</p>
+        <p class="tr-block">bash bench.sh concurrent &amp;&amp; python3 summary.py</p></div>
+      </li>
+    </ol>
+
+    <div class="note">
+      <h2>原始数据与工具</h2>
+      <ul>
+        <li><strong>bench-chat.mjs</strong>：发一轮对话，记录每一帧相对发送时刻的毫秒数，按 <code>tool.call</code> / <code>tool.result</code> / <code>answerDelta</code> 标记首词时刻。</li>
+        <li><strong>bench.sh</strong>：3 用户各阶段编排；<strong>bench10.sh</strong>：10 用户版本（mem / warm / concurrent / coldconc / conc10plain 等）；原始记录在 <strong>bench-results.jsonl</strong> 与 <strong>bench10-results.jsonl</strong>；<strong>summary.py</strong> / <strong>summary10.py</strong> 汇总。</li>
+        <li><strong>环境</strong>：220 e2e，8 核 15 GB，宿主镜像 <code>byclaw/dsh:0.2.1-multi2</code>，工具环境空闲 180 秒暂停，BE 已启用 <code>byclaw.sandbox.shared-dsh-host.*</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); });
+}, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => {
+  ev.preventDefault();
+  const s = document.getElementById(a.dataset.sec);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', '#' + a.dataset.sec);
+}));
+
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer');
+  const bar = document.getElementById('annBar');
+  const launch = document.getElementById('annLaunch');
+  const toggle = document.getElementById('annToggle');
+  const colorEl = document.getElementById('annColor');
+  const sizeEl = document.getElementById('annSize');
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = [];
+  const strokes = [];
+  let fitting = false;
+  const fit = () => {
+    if (fitting) return;
+    fitting = true;
+    layer.style.width = '0px';
+    layer.style.height = '0px';
+    const w = document.documentElement.clientWidth;
+    const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    layer.setAttribute('width', w);
+    layer.setAttribute('height', h);
+    layer.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    fitting = false;
+  };
+  fit();
+  addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.body);
+  const setOn = v => {
+    on = v;
+    document.body.classList.toggle('ann-on', on);
+    toggle.textContent = on ? '标注中' : '开启标注';
+    toggle.classList.toggle('on', on);
+  };
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => {
+    tool = b.dataset.tool;
+    document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b));
+    if (!on) setOn(true);
+    strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; });
+  }));
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => { const last = strokes.pop(); if (last) last.remove(); });
+  document.getElementById('annClear').addEventListener('click', () => { while (strokes.length) strokes.pop().remove(); });
+  document.getElementById('annHide').addEventListener('click', () => { setOn(false); bar.classList.add('hidden'); launch.classList.add('show'); });
+  launch.addEventListener('click', () => { bar.classList.remove('hidden'); launch.classList.remove('show'); });
+  const at = e => { const r = layer.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  layer.addEventListener('pointerdown', e => {
+    if (!on || e.button !== 0) return;
+    if (tool === 'eraser') return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    drawing = true;
+    pts = [at(e)];
+    cur = document.createElementNS(NS, 'path');
+    const w = +sizeEl.value;
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke', colorEl.value);
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    if (tool === 'mark') { cur.setAttribute('stroke-width', w * 3.2); cur.setAttribute('stroke-opacity', '0.32'); cur.style.mixBlendMode = 'multiply'; }
+    else { cur.setAttribute('stroke-width', w); }
+    cur.style.pointerEvents = 'none';
+    cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`);
+    layer.appendChild(cur);
+  });
+  layer.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = at(e), last = pts[pts.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return;
+    pts.push(p);
+    cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`);
+  });
+  const end = () => { if (!drawing) return; drawing = false; if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); } cur = null; };
+  layer.addEventListener('pointerup', end);
+  layer.addEventListener('pointercancel', end);
+  layer.addEventListener('pointerover', e => {
+    if (on && tool === 'eraser' && e.target !== layer) { const i = strokes.indexOf(e.target); if (i > -1) { strokes.splice(i, 1); e.target.remove(); } }
+  });
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape' && on) setOn(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) { e.preventDefault(); const last = strokes.pop(); if (last) last.remove(); }
+  });
+})();
+</script>
+</body>
+</html>

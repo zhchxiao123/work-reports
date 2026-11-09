@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>账本怎么贯穿系统 · ByClaw 稳定性规划</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  body { padding-right: 24px; }
+  .mini { max-width: 960px; margin: 0 auto; }
+  .tldr { margin-top: 14px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+  section { margin-top: 42px; }
+  .srcline { margin-top: 24px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
+  td code, .tr-body code { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="mini">
+  <a class="doc-home" href="byclaw-durable-roadmap-v2.html#p4">← 返回规划：架构怎么一步步演进</a>
+  <header>
+    <div class="eyebrow">规划详解 · 账本</div>
+    <h1>账本怎么贯穿系统</h1>
+    <p class="lead">账本回答一个问题：这一轮做到哪了，还欠用户什么。它不是一个要新建的大存储。DSH 已经记下了大部分内容，我们只补缺的那一层，并规定谁能写、谁能读。</p>
+    <div class="tldr"><b>结论</b>：账本不是一个新存储：DSH 日志存内容，进度记录随日志写，Redis 待确认列表当待办，轮次索引放数据库给 BE 看。日志和进度只由宿主写，索引由 BE 根据结局事件维护；请求都通过命令发给宿主。每次执行是一次可替换的“尝试”。</div>
+  </header>
+
+  <section id="l1">
+    <h2><span class="n">01</span>账本由什么组成</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:17%">部分</th><th style="width:33%">存什么</th><th style="width:17%">放哪</th><th style="width:11%">何时有</th><th>为什么这样放</th></tr>
+        <tr><td>DSH 日志</td><td>用户消息、回答、每次尝试、工具调用和结果、这一轮的开始和结束</td><td>共享存储上的会话文件</td><td>已有</td><td>模型上下文本来就来自这里，再复制一份就有两份真相</td></tr>
+        <tr><td>进度记录</td><td>这一轮对应哪条命令、哪个 trace id、用哪个沙箱、第几次尝试、配置版本</td><td>写进同一份 DSH 日志（插件事件）</td><td>阶段 2</td><td>和内容同序、同一次落盘，崩溃后看到的是一致的前缀</td></tr>
+        <tr><td>未完成的命令</td><td>还没处理完的用户请求</td><td>Redis 待确认列表</td><td>已有</td><td>阶段 2 用它当续跑器的待办清单，不加新存储</td></tr>
+        <tr><td>轮次索引</td><td>每轮一行：状态、结局、归属宿主</td><td>BE 数据库</td><td>阶段 3</td><td>BE 读不了会话文件，也要跨会话查询；阶段 4 的租约也放这里</td></tr>
+      </table>
+      <div class="delta"><b>实时文字不在账本里</b>：它只走 Redis，半截丢了就重新生成。</div>
+    </div>
+  </section>
+
+  <section id="l2">
+    <h2><span class="n">02</span>每个组件和账本的关系</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:16%">组件</th><th style="width:12%">权限</th><th>做什么</th></tr>
+        <tr><td>宿主</td><td><span class="badge ok">写日志和进度</span></td><td>写进度记录；启动时读日志和待办，新起尝试或明确失败</td></tr>
+        <tr><td>BE</td><td><span class="badge part">写索引</span></td><td>阶段 3 起消费结局事件写索引，并按它收尾；Redis 丢失时按索引重投未结束的轮次；发消息、停止这些请求都通过命令发给宿主</td></tr>
+        <tr><td>Redis</td><td><span class="badge no">不存账本</span></td><td>传命令和实时事件；阶段 3 起丢了也能对账重建</td></tr>
+        <tr><td>前端</td><td><span class="badge no">不碰</span></td><td>继续用快照 + 水位，看到的由 BE 提供</td></tr>
+        <tr><td>工具沙箱</td><td><span class="badge no">不知道</span></td><td>只执行命令。账本记录它是哪个沙箱，工具调用带 <code>callId</code></td></tr>
+        <tr><td>运维</td><td><span class="badge part">只读</span></td><td>按用户和会话查每轮进度</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="l3">
+    <h2><span class="n">03</span>一轮对话走一遍</h2>
+    <p class="sub">下面是阶段 3 之后的完整形态。</p>
+    <ol class="trace">
+      <li><div class="tr-head"><b>收下输入</b><span class="tr-stage">命令 → 日志 + 索引</span></div><div class="tr-body"><p>宿主用稳定消息 ID 把消息交给 DSH，并写绑定记录。Redis 命令不确认，留作待办，直到结局落盘。</p></div></li>
+      <li><div class="tr-head"><b>模型回答</b><span class="tr-stage">实时走 Redis</span></div><div class="tr-body"><p>文字直接推送，不写账本。回答完整后 DSH 写入日志。</p></div></li>
+      <li><div class="tr-head"><b>执行工具</b><span class="tr-stage">DSH 保证顺序</span></div><div class="tr-body"><p>工具调用落盘后才经 SSH 到沙箱执行，结果在下一次模型请求前落盘。</p></div></li>
+      <li><div class="tr-head"><b>等待</b><span class="tr-stage">提问 · 委派</span></div><div class="tr-body"><p>提问状态在 Redis，日志里有未结束的工具调用，BE 据事件在索引标“等用户”。委派的父子关系目前只在进程内，由续跑器按日志判断。</p></div></li>
+      <li><div class="tr-head"><b>结局</b><span class="tr-stage">落盘后才算数</span></div><div class="tr-body"><p>先等日志落盘，再把最终答案和结局事件发到 Redis，记下已发送，然后确认命令。BE 消费事件后写索引、入库并收尾。后台任务还在跑时，这一轮保持打开，带时限。</p></div></li>
+    </ol>
+  </section>
+
+  <section id="l4">
+    <h2><span class="n">04</span>宿主重启后怎么接</h2>
+    <p class="sub">续跑器启动时扫描自己名下未确认的命令，逐条打开会话对照日志。DSH 打开会话时会自动补上被中断的结尾和工具错误结果。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:38%">日志里看到</th><th>动作</th></tr>
+        <tr><td>这一轮已完成，有答复</td><td>补发最终答案和结束事件，确认命令；BE 已有标记能吸收重复</td></tr>
+        <tr><td>这一轮被中断（DSH 补了结尾）</td><td>新起一次尝试并附恢复说明：先检查目录、git 和外部状态，再决定是否重复外部动作；前端替换这一步。尝试次数到上限直接失败</td></tr>
+        <tr><td>有未回答的提问</td><td>继续等待，沿用现有的冷恢复</td></tr>
+        <tr><td>没有这条命令的绑定记录</td><td>先按稳定消息 ID 查“已落盘日志 + 队列”：已有就接上，没有才按新命令处理，避免出现两份消息</td></tr>
+      </table>
+      <div class="delta"><b>为什么用恢复说明</b>：工具如果已经跑了一半，DSH 会告诉模型“结果未知”。恢复说明进一步要求先核实外部状态；但发邮件、部署这类外部副作用仍可能重复，所以尝试次数要有上限。</div>
+    </div>
+  </section>
+
+  <section id="l5">
+    <h2><span class="n">05</span>最难的三处</h2>
+    <div class="g3">
+      <div class="card"><h3>日志和索引不在一个事务</h3><div class="tag">写入顺序固定</div><p>先写日志并等落盘，再发结局事件，BE 据此写索引。崩溃后对不上时，以日志为准，补发事件修正索引。</p></div>
+      <div class="card"><h3>日志序号不能当全局编号</h3><div class="tag">崩溃后可能复用（推断）</div><p>序号就是内存里的长度，丢失的序号之后会分配给别的事件。对外的引用要用 trace id、命令 ID 这类稳定编号。</p></div>
+      <div class="card"><h3>两个可能丢输入的窗口</h3><div class="tag">读代码推断，待实测</div><p>优雅停机可能清空排队；消息被取出后、写入日志前崩溃，它既不在队列也不在历史。靠对账补投兜住：命令留到结局才确认，按稳定 ID 查日志和队列，缺了就重投。改 DSH core 降为可选。</p></div>
+    </div>
+  </section>
+
+  <p class="srcline">依据 DSH master ce7073d512（0.2.2-alpha.2）与 ByClaw D0.6.0 57326a580 的代码，均未运行。日志落盘和恢复逻辑在 rc.2 与最新版之间没有差异。进度记录使用插件事件，需要核实其他读者能否容忍未知事件。</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ByClaw + DSH 共享宿主与多沙箱技术方案 · 2026-10-20</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+</style>
+</head>
+<body>
+<svg id="annLayer" aria-hidden="true"></svg>
+
+<div class="ann-bar" id="annBar">
+  <button id="annToggle" class="primary">开启标注</button>
+  <span class="sep"></span>
+  <button class="ann-tool on" data-tool="pen" title="画笔">画笔</button>
+  <button class="ann-tool" data-tool="mark" title="荧光笔">荧光笔</button>
+  <button class="ann-tool" data-tool="eraser" title="橡皮擦">橡皮擦</button>
+  <span class="sep"></span>
+  <input type="color" id="annColor" value="#D97757" title="颜色">
+  <input type="range" id="annSize" min="2" max="26" value="4" title="粗细">
+  <span class="sep"></span>
+  <button id="annUndo">撤销</button>
+  <button id="annClear">清空</button>
+  <button id="annHide">收起</button>
+</div>
+<button class="ann-launch" id="annLaunch" title="展开标注工具">✎ 标注</button>
+
+<div class="sheet">
+
+  <aside class="sidenav">
+    <a class="doc-home" href="index.html">← 研究资料首页</a>
+    <div class="brand">
+      <div class="brand-eyebrow">技术方案</div>
+      <div class="brand-title">ByClaw + DSH<br>共享宿主与多沙箱</div>
+      <div class="brand-sub">v2 · 2026-10-20 · 已在 220 验证</div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#s1" data-sec="s1"><span class="num">01</span><span>问题与结论</span></a>
+      <a href="#s2" data-sec="s2"><span class="num">02</span><span>总体架构</span></a>
+      <a href="#s3" data-sec="s3"><span class="num">03</span><span>三层职责</span></a>
+      <a href="#s4" data-sec="s4"><span class="num">04</span><span>用户生命周期</span></a>
+      <a href="#s5" data-sec="s5"><span class="num">05</span><span>工具环境 B</span></a>
+      <a href="#s6" data-sec="s6"><span class="num">06</span><span>隔离模型</span></a>
+      <a href="#s7" data-sec="s7"><span class="num">07</span><span>插件改造</span></a>
+      <a href="#s8" data-sec="s8"><span class="num">08</span><span>平台侧改造</span></a>
+      <a href="#s9" data-sec="s9"><span class="num">09</span><span>实测指标</span></a>
+      <a href="#s10" data-sec="s10"><span class="num">10</span><span>横向扩容</span></a>
+      <a href="#s11" data-sec="s11"><span class="num">11</span><span>缺口与下一步</span></a>
+      <a href="#s12" data-sec="s12"><span class="num">12</span><span>代码与资料</span></a>
+    </nav>
+    <div class="navhint">点击目录跳转 · 正文连续滚动 · 右侧可圈画标注</div>
+  </aside>
+
+  <main class="main">
+
+  <header>
+    <div class="eyebrow">ByClaw · DSH 0.2.1 · OpenSandbox</div>
+    <h1>一个 DSH 宿主承载多个用户，每个用户一个工具沙箱</h1>
+    <p class="lead">ByClaw 之前为每个用户启动一个完整的 DSH 容器。本方案把它拆成两层：一个常驻的 DSH 宿主进程（A）承载所有用户的对话上下文；每个用户的文件、进程和终端在自己的工具沙箱（B）里执行。平台（BE）把“启动一个沙箱”变成“在宿主上添加一个用户上下文”。全部改动已在 220 e2e 环境跑通，并提交到 PR <a href="https://github.com/beyonai/ByClaw/pull/312">beyonai/ByClaw#312</a>。</p>
+  </header>
+
+  <section id="s1" style="margin-top:4px">
+    <h2><span class="n">01</span>问题与结论</h2>
+    <p class="sub">先说为什么要拆，再说拆完是什么样。</p>
+
+    <div class="thesis">
+      <div class="t-kicker">结论</div>
+      <div class="t-main">把 DSH 分成<em>常驻的对话层</em>和<em>按需的执行层</em>之后，每个用户的固定开销从一个容器降到 <em>25 到 50 MB</em>，工具沙箱空闲即暂停，而文件、进程、终端的隔离仍然是容器级的。</div>
+      <p><strong>原来的问题</strong>：每个用户一个 DSH 容器，空闲时也常驻约 200 MB 以上；首次登录要拉起整个容器；插件、profile 每个容器各载一份。用户一多，内存先于一切成为瓶颈。</p>
+      <p><strong>现在的形态</strong>：宿主 A 是一个 Node 进程，插件只载一次，每个用户一个 Cordis 上下文；B 是用户自己的 OpenSandbox 容器，第一次用工具时创建，空闲 3 分钟暂停，被删了下次自动重建。BE 通过宿主的管理 API 增删用户，Web 入口经宿主网关按用户路由。</p>
+      <p><strong>默认行为不变</strong>：所有插件改动都是配置开关，不设置时和今天一样；BE 不配置共享宿主时仍是每用户一个沙箱。</p>
+    </div>
+
+    <div class="stats" style="margin-top:16px">
+      <div class="stat"><div class="s-num">1<em> 进程</em></div><div class="s-lab">承载 N 个用户上下文</div><div class="s-sub">插件、profile 只载一次</div></div>
+      <div class="stat hot"><div class="s-num">+25~50<em> MB</em></div><div class="s-lab">每增加一个用户</div><div class="s-sub">第一个用户 +300 MB</div></div>
+      <div class="stat"><div class="s-num">7~11<em> s</em></div><div class="s-lab">登录到上下文就绪</div><div class="s-sub">BE PUT → 宿主回 ready</div></div>
+      <div class="stat hot"><div class="s-num">0.6<em> s</em></div><div class="s-lab">热态首词</div><div class="s-sub">冷启动 3.1 s</div></div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>结论是两层分离。</b><span class="to">↓　先把全图画出来，看每个部件在哪。</span></div>
+
+  <section id="s2">
+    <h2><span class="n">02</span>总体架构</h2>
+    <p class="sub">五个部件：前端、BE、Redis、宿主 A、工具沙箱 B；外加一份共享存储。</p>
+
+    <figure>
+      <div class="fig-h">图 1 · 总体架构<span>绿底 = 常驻 · 橙底 = 按需 · 灰底 = 原有部件</span></div>
+      <svg class="rf" viewBox="0 0 760 330" role="img" aria-label="总体架构：前端经 BE 到共享宿主 A，宿主内每用户一个上下文，每个上下文通过 SSH 连接自己的工具沙箱 B；Redis 承载消息和归属；共享存储承载用户数据">
+        <defs>
+          <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+        </defs>
+        <rect class="box-d" x="14" y="24" width="96" height="46" rx="8"/>
+        <text x="62" y="44" text-anchor="middle" style="fill:#141413;font-weight:600">前端</text>
+        <text x="62" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">聊天 · 员工 · 文件</text>
+        <path class="ln" d="M112,47 L134,47" marker-end="url(#ar1)"/>
+        <rect class="box-d" x="138" y="24" width="116" height="46" rx="8"/>
+        <text x="196" y="44" text-anchor="middle" style="fill:#141413;font-weight:600">ByClaw BE</text>
+        <text x="196" y="60" class="tiny" text-anchor="middle" style="fill:#3D3D3A">授权 · 生命周期 · 路由</text>
+        <rect class="box-d" x="138" y="100" width="116" height="40" rx="8"/>
+        <text x="196" y="117" text-anchor="middle" style="fill:#141413;font-weight:600">Redis</text>
+        <text x="196" y="132" class="tiny" text-anchor="middle" style="fill:#3D3D3A">worker 队列 · 用户归属</text>
+        <path class="ln" d="M196,72 L196,96" marker-end="url(#ar1)"/>
+        <path class="ln" d="M256,47 L302,47" marker-end="url(#ar1)"/>
+        <text x="279" y="40" class="tiny" text-anchor="middle" style="fill:#87867F">PUT/DELETE</text>
+        <rect class="box-ok" x="306" y="14" width="222" height="226" rx="10"/>
+        <text x="417" y="34" text-anchor="middle" style="fill:#141413;font-weight:600">宿主 A · 一个 Node 进程</text>
+        <text x="417" y="49" class="tiny" text-anchor="middle" style="fill:#3D3D3A">管理 API :7300 · 网关 /u/{用户}/</text>
+        <rect class="box" x="322" y="62" width="190" height="40" rx="7"/>
+        <text x="417" y="79" text-anchor="middle" class="lab" style="fill:#141413">上下文 · 用户 1</text>
+        <text x="417" y="94" class="tiny" text-anchor="middle" style="fill:#87867F">会话 · 模型 · 插件 · Web UI</text>
+        <rect class="box" x="322" y="112" width="190" height="40" rx="7"/>
+        <text x="417" y="129" text-anchor="middle" class="lab" style="fill:#141413">上下文 · 用户 2</text>
+        <text x="417" y="144" class="tiny" text-anchor="middle" style="fill:#87867F">各自 dsh-home · 各自 worker</text>
+        <rect x="322" y="162" width="190" height="40" rx="7" fill="none" stroke="#D1CFC5" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="417" y="186" class="tiny" text-anchor="middle" style="fill:#87867F">上下文 · 用户 N（按需添加）</text>
+        <text x="417" y="228" class="tiny" text-anchor="middle" style="fill:#3D3D3A">插件只载一次 · 每用户浏览器实例</text>
+        <path class="ln" d="M514,82 L558,82" marker-end="url(#ar1)"/>
+        <path class="ln" d="M514,132 L558,132" marker-end="url(#ar1)"/>
+        <text x="536" y="74" class="tiny" text-anchor="middle" style="fill:#87867F">SSH</text>
+        <rect class="box-x" x="562" y="62" width="184" height="40" rx="7"/>
+        <text x="654" y="79" text-anchor="middle" class="lab" style="fill:#141413">B · 用户 1 的工具沙箱</text>
+        <text x="654" y="94" class="tiny" text-anchor="middle" style="fill:#87867F">文件 · 进程 · 终端 · 技能</text>
+        <rect class="box-x" x="562" y="112" width="184" height="40" rx="7"/>
+        <text x="654" y="129" text-anchor="middle" class="lab" style="fill:#141413">B · 用户 2 的工具沙箱</text>
+        <text x="654" y="144" class="tiny" text-anchor="middle" style="fill:#87867F">空闲暂停 · 删除即重建</text>
+        <rect x="562" y="162" width="184" height="40" rx="7" fill="none" stroke="#D97757" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="654" y="186" class="tiny" text-anchor="middle" style="fill:#87867F">B · 用户 N（第一次用工具时创建）</text>
+        <rect class="box-d" x="562" y="214" width="184" height="26" rx="6"/>
+        <text x="654" y="231" class="tiny" text-anchor="middle" style="fill:#3D3D3A">OpenSandbox：创建 / 暂停 / 恢复 / 删除</text>
+        <rect class="box-d" x="306" y="266" width="440" height="40" rx="8"/>
+        <text x="526" y="283" text-anchor="middle" style="fill:#141413;font-weight:600">共享存储（宿主机卷 / NAS）</text>
+        <text x="526" y="298" class="tiny" text-anchor="middle" style="fill:#3D3D3A">users/&lt;用户&gt;/dsh-home（A 读写） · byclaw-&lt;用户&gt;/by（B 挂载为 /by）</text>
+        <path class="ln" d="M417,242 L417,262" marker-end="url(#ar1)"/>
+        <path class="ln" d="M654,242 L654,262" marker-end="url(#ar1)"/>
+        <text x="14" y="322" class="tiny" style="fill:#87867F">消息路径不变：BE 把消息投给 Redis 上的 BYCLAW_DSH_&lt;用户&gt; worker，用户上下文在哪台宿主上都能收到。</text>
+      </svg>
+      <figcaption><b>宿主本身是无状态的</b>：用户的会话、配置、密钥都在共享存储里，B 的文件在用户自己的卷上。任何一台宿主都能拉起任何一个用户，这是第 10 节横向扩容的前提。</figcaption>
+    </figure>
+  </section>
+
+  <div class="bridge"><b>部件都在图上了。</b><span class="to">↓　每一层各管什么，边界划在哪。</span></div>
+
+  <section id="s3">
+    <h2><span class="n">03</span>三层职责</h2>
+    <p class="sub">划分原则只有一条：碰用户文件和进程的事情在 B，其余在 A，决定谁该存在的在 BE。</p>
+
+    <div class="g3">
+      <div class="card">
+        <h3>宿主 A</h3>
+        <div class="tag">常驻 · 一个进程 · 每用户一个上下文</div>
+        <p>Web UI、会话持久化、模型调用、Agent 循环、插件逻辑。每个上下文有自己的 dsh-home、worker 名、环回监听端口、浏览器实例。</p>
+        <p style="margin-top:8px">对外两个口：管理 API（BE 用）和 Web 网关（浏览器用）。</p>
+      </div>
+      <div class="card">
+        <h3>工具沙箱 B</h3>
+        <div class="tag">按需 · 每用户一个容器 · 同一镜像</div>
+        <p>通过 DSH 0.2.1 的 SSH provider 接管 <code>ctx.fs</code>、<code>ctx.subprocess</code>、<code>ctx.sandbox</code> 和 PTC。bash、文件树、git、终端 PTY、技能文件、语音和媒体落盘、agent-teams 成员进程都在这里。</p>
+        <p style="margin-top:8px">只挂载这个用户的 <code>/by</code> 和只读的 agent-templates。</p>
+      </div>
+      <div class="card">
+        <h3>平台 BE</h3>
+        <div class="tag">控制面 · 不碰用户数据</div>
+        <p>决定员工授权、谁在线、何时回收。启动 = 向宿主 <code>PUT</code> 用户；释放 = <code>DELETE</code>；Web 入口 = 宿主网关地址加该用户的 token。</p>
+        <p style="margin-top:8px">空闲回收仍按记录（即按用户）计时，30 分钟无访问即释放上下文。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>职责清楚了。</b><span class="to">↓　把一个用户从登录到回收走一遍。</span></div>
+
+  <section id="s4">
+    <h2><span class="n">04</span>用户生命周期</h2>
+    <p class="sub">每一步都在 220 上用真实登录和对话验证过，时间是当时的实测值。</p>
+
+    <ol class="trace">
+      <li>
+        <div class="tr-head"><span class="tr-stage">登录</span><b>BE 向宿主 PUT 用户</b></div>
+        <div class="tr-body"><p>BE 的 <code>SharedDshHostRuntimeProvider</code> 把 byclaw-dsh 的启动请求变成 <code>PUT /v1/users/{用户}</code>，带上 sandboxId 和该用户的个人参数。宿主为这个用户组合 profile、加载插件、启动环回 Web 监听，写入 Redis 归属键。<b>7 到 11 秒</b>返回 ready 和该用户的 webToken。</p>
+        <p class="tr-block">PUT 幂等；上下文已在运行时直接返回。BE 记录 sandboxId 为 byclaw-dsh-&lt;用户&gt;，endpoint 为网关地址。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">打开页面</span><b>浏览器经网关进入用户的上下文</b></div>
+        <div class="tr-body"><p>入口 <code>/u/{用户}/chat?token=…</code>。网关校验 token 后种下仅限该用户路径的 cookie，并把请求以环回身份转给该上下文的 DSH 监听。无 token 401，拿别人的 cookie 访问 401。WebSocket 同样经网关代理。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">第一次工具调用</span><b>创建或唤醒 B</b></div>
+        <div class="tr-body"><p>上下文的第一个远程操作触发租约：B 不存在就通过 OpenSandbox 创建并等 sshd 就绪；已暂停就恢复。会话目录在 B 上创建，技能从 B 读取，然后才调模型。<b>冷启动首词 3.1 秒，暂停唤醒 1.9 秒，热态 0.6 秒。</b></p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">空闲</span><b>B 自己暂停，上下文保留</b></div>
+        <div class="tr-body"><p>3 分钟没有操作、也没有打开的流，B 被暂停；正在跑的命令和后台任务会占着流，不会被中途暂停。上下文留在宿主里，内存约 50 MB。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">回收</span><b>BE DELETE 用户</b></div>
+        <div class="tr-body"><p>30 分钟无访问，BE 的空闲清理任务按记录释放，经 provider 变成 <code>DELETE /v1/users/{用户}</code>。宿主销毁上下文、释放 Redis 归属键；B 保持暂停状态，用户文件都在共享卷上，不丢。</p></div>
+      </li>
+      <li>
+        <div class="tr-head"><span class="tr-stage">宿主重启</span><b>reconcile 自动重建</b></div>
+        <div class="tr-body"><p>宿主重启后所有上下文消失，BE 的一致性检查发现远端不存在，按记录自身的类型重拉，用户在几秒内回到宿主。这里修了一个原有缺陷：重拉以前按员工类型解析，会把 byclaw-dsh 用户拉成 openclaw。</p></div>
+      </li>
+    </ol>
+  </section>
+
+  <div class="bridge"><b>生命周期里最关键的部件是 B 的租约。</b><span class="to">↓　它怎么保证 B 来去自如而连接不断。</span></div>
+
+  <section id="s5">
+    <h2><span class="n">05</span>工具环境 B 的机制</h2>
+    <p class="sub">由插件 <code>@byclaw/dsh-tool-env</code> 实现，默认关闭，环境变量 <code>BYCLAW_DSH_TOOL_ENV=opensandbox</code> 时生效。</p>
+
+    <figure>
+      <div class="fig-h">图 2 · B 的状态与租约<span>实线 = 自动转换 · 虚线 = 外部事件</span></div>
+      <svg class="rf" viewBox="0 0 760 210" role="img" aria-label="B 的状态机：不存在、创建中、就绪、已暂停、已删除；由租约、空闲和外部事件驱动">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker>
+          <marker id="ar2r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04A3F"/></marker>
+        </defs>
+        <rect x="14" y="70" width="120" height="46" rx="8" fill="none" stroke="#D1CFC5" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="74" y="90" text-anchor="middle" style="fill:#141413;font-weight:600">不存在</text>
+        <text x="74" y="106" class="tiny" text-anchor="middle" style="fill:#87867F">首次 · 过期 · 被删</text>
+        <path class="ln" d="M136,93 L190,93" marker-end="url(#ar2)"/>
+        <text x="163" y="86" class="tiny" text-anchor="middle" style="fill:#3D3D3A">租约</text>
+        <rect class="box-d" x="194" y="70" width="120" height="46" rx="8"/>
+        <text x="254" y="90" text-anchor="middle" style="fill:#141413;font-weight:600">创建中</text>
+        <text x="254" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">容器 + sshd + 密钥</text>
+        <path class="ln" d="M316,93 L370,93" marker-end="url(#ar2)"/>
+        <text x="343" y="86" class="tiny" text-anchor="middle" style="fill:#3D3D3A">连上</text>
+        <rect class="box-ok" x="374" y="70" width="130" height="46" rx="8"/>
+        <text x="439" y="90" text-anchor="middle" style="fill:#141413;font-weight:600">就绪</text>
+        <text x="439" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">ctx.fs / subprocess 走 SSH</text>
+        <path class="ln" d="M506,84 L580,84" marker-end="url(#ar2)"/>
+        <text x="543" y="77" class="tiny" text-anchor="middle" style="fill:#3D3D3A">空闲 3 分钟</text>
+        <path class="ln" d="M580,102 L506,102" marker-end="url(#ar2)"/>
+        <text x="543" y="118" class="tiny" text-anchor="middle" style="fill:#3D3D3A">下一次操作</text>
+        <rect class="box-x" x="584" y="70" width="160" height="46" rx="8"/>
+        <text x="664" y="90" text-anchor="middle" style="fill:#141413;font-weight:600">已暂停</text>
+        <text x="664" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">不占 CPU · 文件在卷上</text>
+        <path class="ln-d" d="M664,118 L664,150 L74,150 L74,118" marker-end="url(#ar2r)"/>
+        <text x="369" y="165" class="tiny" text-anchor="middle" style="fill:#B04A3F">过期（timeoutSeconds）或被删除 → 下次租约自动重建，/by 不丢</text>
+        <path class="ln" d="M439,118 L439,40 L254,40 L254,68" marker-end="url(#ar2)"/>
+        <text x="347" y="34" class="tiny" text-anchor="middle" style="fill:#3D3D3A">连接断开 → 下一次操作重新租约（不重放）</text>
+        <text x="14" y="198" class="tiny" style="fill:#87867F">A 持有客户端密钥和 B 的主机密钥，创建时一起交给 B，所以主机密钥是固定的；B 只接受这把钥匙登录。每次远程 spawn 都剥掉 BYCLAW_TOOL_ENV_* 变量。</text>
+      </svg>
+      <figcaption><b>ctx.ssh 是一个可重连的租约，而不是一条连接</b>。DSH 的 SshConnection 本身不重连；插件在外面包一层稳定的门面，B 消失时进行中的那一步失败一次，下一步自动重连。A 还会在使用期间续 B 的过期时间，A 不辞而别时 B 最多活 timeoutSeconds。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:26%">DSH 基础行</th><th style="width:30%">替换为</th><th>效果</th></tr>
+        <tr><td>fs-sandbox</td><td>dsh-fs-ssh</td><td>读写、列目录、搜索在 B 上执行</td></tr>
+        <tr><td>subprocess</td><td>dsh-subprocess-ssh</td><td>bash、PTY、后台任务在 B 上，流保持打开时 B 不会被暂停</td></tr>
+        <tr><td>sandbox</td><td>dsh-sandbox-ssh</td><td>权限策略由 B 执行；拆分模式默认 <code>danger-full-access</code>，B 容器本身是边界</td></tr>
+        <tr><td>ptc-runtime</td><td>经 SSH 启动</td><td>PTC 的引导脚本摘要由 A 按自身安装计算，B 校验不匹配即拒绝</td></tr>
+      </table>
+      <div class="delta"><b>A 和 B 必须同一个镜像</b>：helper 和 PTC 引导的摘要来自 A 自己的安装，镜像不一致时 B 会拒绝连接。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>B 隔离的是文件和进程。</b><span class="to">↓　那同一个进程里的用户，靠什么互不可见。</span></div>
+
+  <section id="s6">
+    <h2><span class="n">06</span>隔离模型</h2>
+    <p class="sub">两种边界：宿主进程内按上下文的软隔离，B 的容器级硬隔离。凡是碰用户数据的动作都落在硬边界里。</p>
+
+    <figure>
+      <div class="fig-h">图 3 · 两层隔离边界<span>进程内 = 配置与上下文 · 容器 = 文件与进程</span></div>
+      <svg class="rf" viewBox="0 0 760 240" role="img" aria-label="隔离边界：宿主进程内每用户一个上下文，各自配置、dsh-home、worker、浏览器；每用户一个 B 容器，各自 /by 卷、进程、终端">
+        <rect class="box-ok" x="14" y="14" width="360" height="212" rx="10"/>
+        <text x="194" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">宿主进程内 · 软隔离（按上下文）</text>
+        <text x="194" y="52" class="tiny" text-anchor="middle" style="fill:#3D3D3A">规则：插件只读自己上下文的配置，不用进程级共享状态</text>
+        <rect class="box" x="30" y="66" width="160" height="146" rx="8"/>
+        <text x="110" y="86" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">上下文 · 用户 1</text>
+        <text x="110" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">dsh-home · 会话 · 密钥</text>
+        <text x="110" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">员工授权（BE 按用户）</text>
+        <text x="110" y="138" class="tiny" text-anchor="middle" style="fill:#3D3D3A">worker BYCLAW_DSH_用户1</text>
+        <text x="110" y="154" class="tiny" text-anchor="middle" style="fill:#3D3D3A">浏览器实例 · socket</text>
+        <text x="110" y="170" class="tiny" text-anchor="middle" style="fill:#3D3D3A">agent-teams 状态根</text>
+        <text x="110" y="186" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Web token · 环回端口</text>
+        <rect class="box" x="198" y="66" width="160" height="146" rx="8"/>
+        <text x="278" y="86" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">上下文 · 用户 2</text>
+        <text x="278" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">dsh-home · 会话 · 密钥</text>
+        <text x="278" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">员工授权（BE 按用户）</text>
+        <text x="278" y="138" class="tiny" text-anchor="middle" style="fill:#3D3D3A">worker BYCLAW_DSH_用户2</text>
+        <text x="278" y="154" class="tiny" text-anchor="middle" style="fill:#3D3D3A">浏览器实例 · socket</text>
+        <text x="278" y="170" class="tiny" text-anchor="middle" style="fill:#3D3D3A">agent-teams 状态根</text>
+        <text x="278" y="186" class="tiny" text-anchor="middle" style="fill:#3D3D3A">Web token · 环回端口</text>
+        <rect class="box-x" x="396" y="14" width="350" height="212" rx="10"/>
+        <text x="571" y="36" text-anchor="middle" style="fill:#141413;font-weight:600">B 容器 · 硬隔离（按用户）</text>
+        <text x="571" y="52" class="tiny" text-anchor="middle" style="fill:#3D3D3A">只挂载自己的卷，只接受自己 A 的密钥</text>
+        <rect class="box" x="412" y="66" width="156" height="146" rx="8"/>
+        <text x="490" y="86" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">B · 用户 1</text>
+        <text x="490" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/by ← byclaw-用户1/by</text>
+        <text x="490" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">技能 /by/.openclaw</text>
+        <text x="490" y="138" class="tiny" text-anchor="middle" style="fill:#3D3D3A">bash · PTY · 后台任务</text>
+        <text x="490" y="154" class="tiny" text-anchor="middle" style="fill:#3D3D3A">git · 文件树 · 上传</text>
+        <text x="490" y="170" class="tiny" text-anchor="middle" style="fill:#3D3D3A">语音 · 媒体落盘</text>
+        <text x="490" y="186" class="tiny" text-anchor="middle" style="fill:#3D3D3A">env 仅放行列表</text>
+        <rect class="box" x="574" y="66" width="156" height="146" rx="8"/>
+        <text x="652" y="86" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">B · 用户 2</text>
+        <text x="652" y="106" class="tiny" text-anchor="middle" style="fill:#3D3D3A">/by ← byclaw-用户2/by</text>
+        <text x="652" y="122" class="tiny" text-anchor="middle" style="fill:#3D3D3A">技能 /by/.openclaw</text>
+        <text x="652" y="138" class="tiny" text-anchor="middle" style="fill:#3D3D3A">bash · PTY · 后台任务</text>
+        <text x="652" y="154" class="tiny" text-anchor="middle" style="fill:#3D3D3A">git · 文件树 · 上传</text>
+        <text x="652" y="170" class="tiny" text-anchor="middle" style="fill:#3D3D3A">语音 · 媒体落盘</text>
+        <text x="652" y="186" class="tiny" text-anchor="middle" style="fill:#3D3D3A">env 仅放行列表</text>
+      </svg>
+      <figcaption><b>用户 2 看不到用户 1 的员工、技能和文件</b>：员工清单由每个上下文以自己的身份向 BE 拉取；技能和文件只在自己的 B 上。220 上核对过，三个用户的上下文各自只加载了自己的个人助理。</figcaption>
+    </figure>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:22%">对象</th><th style="width:30%">原来（每用户一个 A）</th><th>现在</th></tr>
+        <tr><td>员工可见性</td><td class="col-old">BE 按用户授权</td><td><b>不变</b>，每个上下文以自己的身份拉清单</td></tr>
+        <tr><td>员工模板与技能</td><td class="col-old">A 的 DSH_HOME 和 /by/.openclaw</td><td>用户自己的 dsh-home 和自己 B 上的 /by/.openclaw</td></tr>
+        <tr><td>会话历史</td><td class="col-old">A 的 DSH_HOME/sessions</td><td>users/&lt;用户&gt;/dsh-home/sessions</td></tr>
+        <tr><td>命令、终端、git</td><td class="col-old">A 容器内</td><td><span class="good">B 容器内</span>，容器级隔离</td></tr>
+        <tr><td>浏览器</td><td class="col-old">A 内一个固定 socket</td><td>A 内每用户一个 browserd，socket 在各自运行目录</td></tr>
+        <tr><td>Web 入口</td><td class="col-old">每用户一个地址</td><td>网关 /u/&lt;用户&gt;/ + 按用户的 token 与 cookie</td></tr>
+        <tr><td>环境变量</td><td class="col-old">A 的全部环境透传给命令</td><td><span class="warn">只放行列表内的变量</span>，宿主密钥不进 B</td></tr>
+        <tr><td>故障影响面</td><td class="col-old">一个用户的 A 崩只影响自己</td><td><span class="warn">插件异常按用户隔离；Node 进程级崩溃影响全部用户</span></td></tr>
+      </table>
+      <div class="delta"><b>软隔离的前提是插件守规矩</b>：这轮改造逐个清掉了进程级共享状态（agent-teams 的全局表、by-framework 的内存历史、浏览器的固定 socket、从 process.env 读用户身份）。以后新增插件要守同一条规则。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>隔离靠插件守规矩。</b><span class="to">↓　每个插件具体改了什么。</span></div>
+
+  <section id="s7">
+    <h2><span class="n">07</span>插件改造</h2>
+    <p class="sub">共同约定：新行为全部走配置开关，由宿主按上下文设置；不设置时与今天完全一致。统一的开关名是 <code>workspaceOnToolEnvironment</code>。</p>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:18%">插件</th><th style="width:34%">原来的阻塞点</th><th>改法</th><th style="width:9%">状态</th></tr>
+        <tr><td>browser-use</td><td class="col-old">固定 socket，只能读一次的密钥</td><td><code>ownsRuntime</code>：每上下文自己的 browserd、运行目录、密钥</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>better-sidebar</td><td class="col-old">终端 PTY、文件树、git 在 A 上</td><td>经 <code>ctx.subprocess</code> / <code>ctx.fs</code> 在 B 上执行；每实例自己的缓存</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>agent-teams</td><td class="col-old">状态根 = DSH_HOME + cwd 哈希，模块级 Map</td><td><code>TeamStateRuntime</code> 按上下文；成员进程经 ctx.subprocess 在 B</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>byclaw-integration</td><td class="col-old">技能写 /by/.openclaw、语音媒体写 A 磁盘、多处只能用 DSH_HOME</td><td>文件操作经 B；<code>dshHome</code>、<code>agentSkillRoot</code>、<code>userFsRoot</code>、<code>byRoot</code>、<code>workerHistory</code> 成为配置</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>bash-provider</td><td class="col-old">把 A 的整个环境转发进命令</td><td><code>forwardHostEnvironment.allow</code> 放行列表；远程工作区跳过内存和 cgroup 守卫</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>devflow（9 个包）</td><td class="col-old">直接用 node:fs 和本地 git</td><td><code>WorkspaceIo</code> 接口，按上下文注入 B 上的实现</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>langfuse</td><td class="col-old">userId 来自进程环境</td><td><code>userId</code> 配置</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>by-framework</td><td class="col-old">内存聊天历史无界增长</td><td><code>workerHistory: none</code>，只保留 Redis 消息</td><td><span class="badge ok">已启用</span></td></tr>
+        <tr><td>codegraph</td><td class="col-old">在 A 上起 MCP 子进程</td><td>改为在 B 上经 ctx.subprocess 运行；但 MCP 流常开会让 B 无法空闲暂停</td><td><span class="badge part">暂禁用</span></td></tr>
+        <tr><td>lan-web · HMR</td><td class="col-old">自行绑定 LAN 地址；依赖 CLI 就绪信号</td><td>宿主提供每上下文监听与网关，这两个按设计不启用</td><td><span class="badge no">设计禁用</span></td></tr>
+      </table>
+      <div class="delta"><b>测试</b>：browser-use 251、bash-provider 291、devflow 1612、better-sidebar 1117（4 个已知环境失败）、integration 全套 verify、agent-teams verify、tool-env 10 个单测加真实 sshd 驱动。</div>
+    </div>
+  </section>
+
+  <div class="bridge"><b>插件能共享了。</b><span class="to">↓　宿主和 BE 这两头怎么接上。</span></div>
+
+  <section id="s8">
+    <h2><span class="n">08</span>平台侧改造：宿主启动器与 BE</h2>
+    <p class="sub">宿主启动器是一个脚本；BE 是一个 provider 加一段配置。两边之间只有一份契约。</p>
+
+    <div class="g2">
+      <div class="card">
+        <h3>宿主启动器</h3>
+        <div class="tag">scripts/byclaw-multi-host.mjs · 19 个单测</div>
+        <p><b>管理 API</b>（Bearer token）：<code>PUT /v1/users/{u}</code> 幂等确保上下文运行并返回 webToken；<code>GET</code> 查状态；<code>DELETE</code> 销毁；<code>GET /v1/health</code> 列出用户。</p>
+        <p style="margin-top:8px"><b>网关</b>：<code>/u/{u}/</code> 下的 HTTP 和 WebSocket 代理到该用户的环回监听，token 换 cookie，cookie 限定路径。</p>
+        <p style="margin-top:8px"><b>上下文组装</b>：复用 managed profile 的 bundle 和 node_modules；按用户把配置叠加到各行（因为 patch 会整体替换 config）；替换 Web 监听行；按设计禁用的行标记原因；为每个上下文提供 <code>webStartup</code>。</p>
+        <p style="margin-top:8px"><b>失败隔离</b>：一个用户启动失败、崩溃或未处理的拒绝只标记该用户 failed，下一次 PUT 重试。</p>
+      </div>
+      <div class="card">
+        <h3>BE</h3>
+        <div class="tag">SharedDshHostRuntimeProvider · SandboxServiceTest 41 个全过</div>
+        <p><b>启用</b>：<code>byclaw.sandbox.shared-dsh-host.base-url</code>、<code>token</code>、可选 <code>web-base-url</code>。未配置时一切如旧。</p>
+        <p style="margin-top:8px"><b>路由</b>：只有 byclaw-dsh 类型走宿主，openclaw 等其它类型仍走原 provider。sandboxId 固定为 <code>byclaw-dsh-&lt;用户&gt;</code>，endpoint 指向网关。</p>
+        <p style="margin-top:8px"><b>回收</b>：现有空闲清理任务按记录调用 remove，即 DELETE；心跳对共享上下文是空操作，它活到 DELETE 为止。</p>
+        <p style="margin-top:8px"><b>两个修复</b>：reconcile 按记录类型重拉（原来按员工解析成 openclaw）；未托管宿主写的 Redis 归属键仍可让 BE 跳过独立沙箱。</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <table>
+        <tr><th style="width:26%">契约项</th><th>内容</th></tr>
+        <tr><td>每用户主目录</td><td><code>&lt;root&gt;/users/&lt;用户&gt;/dsh-home</code>，插件通过 <code>dshHome</code> 及派生路径拿到</td></tr>
+        <tr><td>PUT 请求体</td><td><code>{ sandboxId, env? }</code>；sandboxId 用于空闲上报，env 是该用户的个人参数（不能覆盖用户身份）</td></tr>
+        <tr><td>PUT 响应</td><td><code>{ userCode, status: "ready", hostId, webPath: "/u/{用户}/", webToken }</code>；失败 503 带 error</td></tr>
+        <tr><td>Redis 归属</td><td><code>byclaw:dsh:shared-host:user:&lt;用户&gt;</code> = hostId，EX 90，每 30 秒续期</td></tr>
+        <tr><td>Web 入口</td><td><code>&lt;web-base-url&gt;/u/&lt;用户&gt;/chat?token=&lt;webToken&gt;</code></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <div class="bridge"><b>链路通了。</b><span class="to">↓　它到底省了多少、慢了多少。</span></div>
+
+  <section id="s9">
+    <h2><span class="n">09</span>实测指标</h2>
+    <p class="sub">220 e2e，8 核 15 GB，模型 deepseek-flash，三个真实用户。完整数据和复现脚本见<a href="shared-dsh-host-benchmark-2026-10-20.html">性能测试报告</a>。</p>
+
+    <div class="g2">
+      <figure>
+        <div class="fig-h">图 4 · 宿主主进程 RSS<span>MB · 两轮一致</span></div>
+        <svg class="rf" viewBox="0 0 360 170" role="img" aria-label="内存：0 用户 82，1 用户 381，2 用户 431，3 用户 420，对话后 510">
+          <line class="base" x1="92" y1="10" x2="92" y2="150"/>
+          <text x="84" y="28" text-anchor="end" class="lab">空载</text><rect class="bar-n" x="92" y="17" width="34" height="16" rx="3"/><text x="132" y="29" class="mono" style="fill:#141413">82</text>
+          <text x="84" y="56" text-anchor="end" class="lab">1 用户</text><rect class="bar-x" x="92" y="45" width="160" height="16" rx="3"/><text x="258" y="57" class="mono" style="fill:#141413">381</text>
+          <text x="84" y="84" text-anchor="end" class="lab">2 用户</text><rect class="bar-x" x="92" y="73" width="181" height="16" rx="3"/><text x="279" y="85" class="mono" style="fill:#141413">431</text>
+          <text x="84" y="112" text-anchor="end" class="lab">3 用户</text><rect class="bar-x" x="92" y="101" width="176" height="16" rx="3"/><text x="274" y="113" class="mono" style="fill:#141413">420</text>
+          <text x="84" y="140" text-anchor="end" class="lab">40 轮后</text><rect class="bar-ok" x="92" y="129" width="214" height="16" rx="3"/><text x="312" y="141" class="mono" style="fill:#141413">~510</text>
+          <text x="92" y="164" class="tiny" style="fill:#87867F">0</text><text x="302" y="164" class="tiny" style="fill:#87867F">500 MB</text>
+        </svg>
+        <figcaption>第一个用户 +300 MB，之后每用户 +25 到 50 MB；3 用户略低于 2 用户是 GC 抖动。</figcaption>
+      </figure>
+      <figure>
+        <div class="fig-h">图 5 · 首词时间<span>毫秒 · 中位数 · 深色首个输出 / 浅色首个回答字</span></div>
+        <svg class="rf" viewBox="0 0 360 170" role="img" aria-label="首词：无工具 382/1698，冷 3129/5763，暂停唤醒 1873/4774，热 585/3564">
+          <line class="base" x1="92" y1="10" x2="92" y2="150"/>
+          <text x="84" y="26" text-anchor="end" class="lab">无工具</text><rect class="bar-x" x="92" y="15" width="16" height="8" rx="2"/><rect class="bar-n" x="92" y="24" width="71" height="8" rx="2"/><text x="170" y="31" class="mono" style="fill:#3D3D3A">382 / 1698</text>
+          <text x="84" y="60" text-anchor="end" class="lab">冷启动</text><rect class="bar-x" x="92" y="49" width="130" height="8" rx="2"/><rect class="bar-n" x="92" y="58" width="240" height="8" rx="2"/><text x="226" y="55" class="mono" style="fill:#B04A3F;font-weight:600">3129</text><text x="300" y="76" class="mono" style="fill:#3D3D3A">5763</text>
+          <text x="84" y="98" text-anchor="end" class="lab">暂停唤醒</text><rect class="bar-x" x="92" y="87" width="78" height="8" rx="2"/><rect class="bar-n" x="92" y="96" width="199" height="8" rx="2"/><text x="296" y="103" class="mono" style="fill:#3D3D3A">1873 / 4774</text>
+          <text x="84" y="134" text-anchor="end" class="lab">热态</text><rect class="bar-ok" x="92" y="123" width="24" height="8" rx="2"/><rect class="bar-n" x="92" y="132" width="149" height="8" rx="2"/><text x="246" y="139" class="mono" style="fill:#3D3D3A">585 / 3564</text>
+          <text x="92" y="164" class="tiny" style="fill:#87867F">0</text><text x="332" y="164" class="tiny" text-anchor="end" style="fill:#87867F">6 s</text>
+        </svg>
+        <figcaption>冷启动的 2.5 秒在模型调用之前：会话目录和技能先从 B 取。</figcaption>
+      </figure>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:30%">同时对话的用户数</th><th class="num">首个模型输出</th><th class="num">首个回答字</th><th>结论</th></tr>
+        <tr><td>1</td><td class="num">611</td><td class="num">2875</td><td rowspan="3">三组差异小于单用户自身波动（209 到 1949 ms），3 个用户同时对话首词不变慢</td></tr>
+        <tr><td>2</td><td class="num">361</td><td class="num">2693</td></tr>
+        <tr><td>3</td><td class="num">479</td><td class="num">3079</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <div class="bridge"><b>一台宿主不是瓶颈。</b><span class="to">↓　真要上量，怎么加宿主。</span></div>
+
+  <section id="s10">
+    <h2><span class="n">10</span>横向扩容</h2>
+    <p class="sub">宿主无状态、归属在 Redis、消息按用户名路由，这三点已经具备；缺的是 BE 侧选宿主。真正按用户线性增长的是 B 的数量和模型并发。</p>
+
+    <figure>
+      <div class="fig-h">图 6 · 多宿主形态<span>实线 = 已具备 · 虚线 = 待做</span></div>
+      <svg class="rf" viewBox="0 0 760 236" role="img" aria-label="多宿主：BE 按 Redis 归属或负载选宿主；每台宿主承载一批用户上下文；所有宿主共用存储和 OpenSandbox">
+        <defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#87867F"/></marker></defs>
+        <rect class="box-d" x="14" y="80" width="118" height="54" rx="8"/>
+        <text x="73" y="102" text-anchor="middle" style="fill:#141413;font-weight:600">BE</text>
+        <text x="73" y="119" class="tiny" text-anchor="middle" style="fill:#3D3D3A">provider + 宿主池</text>
+        <rect x="150" y="70" width="150" height="74" rx="8" fill="none" stroke="#D97757" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="225" y="92" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">放置规则（待做）</text>
+        <text x="225" y="109" class="tiny" text-anchor="middle" style="fill:#3D3D3A">先查 Redis 归属键</text>
+        <text x="225" y="124" class="tiny" text-anchor="middle" style="fill:#3D3D3A">没有则选用户最少的宿主</text>
+        <path class="ln" d="M134,107 L146,107" marker-end="url(#ar6)"/>
+        <path class="ln" d="M302,90 L358,50" marker-end="url(#ar6)"/>
+        <path class="ln" d="M302,107 L358,107" marker-end="url(#ar6)"/>
+        <path class="ln" d="M302,124 L358,164" marker-end="url(#ar6)"/>
+        <rect class="box-ok" x="362" y="30" width="170" height="40" rx="8"/>
+        <text x="447" y="47" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">宿主 A1 · 用户 1..k</text>
+        <text x="447" y="62" class="tiny" text-anchor="middle" style="fill:#3D3D3A">归属键 = A1，90 秒过期</text>
+        <rect class="box-ok" x="362" y="87" width="170" height="40" rx="8"/>
+        <text x="447" y="104" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">宿主 A2 · 用户 k+1..m</text>
+        <text x="447" y="119" class="tiny" text-anchor="middle" style="fill:#3D3D3A">各自的网关地址</text>
+        <rect class="box-ok" x="362" y="144" width="170" height="40" rx="8"/>
+        <text x="447" y="161" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">宿主 A3 · …</text>
+        <text x="447" y="176" class="tiny" text-anchor="middle" style="fill:#3D3D3A">挂了 → 键过期 → reconcile 换一台</text>
+        <path class="ln" d="M534,50 L590,50" marker-end="url(#ar6)"/>
+        <path class="ln" d="M534,107 L590,107" marker-end="url(#ar6)"/>
+        <path class="ln" d="M534,164 L590,164" marker-end="url(#ar6)"/>
+        <rect class="box-x" x="594" y="30" width="152" height="154" rx="8"/>
+        <text x="670" y="52" text-anchor="middle" class="lab" style="fill:#141413;font-weight:600">OpenSandbox</text>
+        <text x="670" y="70" class="tiny" text-anchor="middle" style="fill:#3D3D3A">每活跃用户一个 B</text>
+        <text x="670" y="88" class="tiny" text-anchor="middle" style="fill:#3D3D3A">这是线性增长的大头</text>
+        <text x="670" y="110" class="tiny" text-anchor="middle" style="fill:#B04A3F">需先跨多台 Docker 宿主机</text>
+        <text x="670" y="125" class="tiny" text-anchor="middle" style="fill:#B04A3F">或接 K8s 运行时</text>
+        <text x="670" y="150" class="tiny" text-anchor="middle" style="fill:#3D3D3A">模型并发是另一条</text>
+        <text x="670" y="165" class="tiny" text-anchor="middle" style="fill:#3D3D3A">独立的上限</text>
+        <rect class="box-d" x="362" y="200" width="384" height="26" rx="6"/>
+        <text x="554" y="217" class="tiny" text-anchor="middle" style="fill:#3D3D3A">共享存储：任意宿主可拉起任意用户 · 消息按 BYCLAW_DSH_&lt;用户&gt; 路由，与宿主无关</text>
+      </svg>
+      <figcaption><b>BE 侧改动是配置和 provider 级的</b>：base-url 改成宿主列表，PUT 前按归属或负载选宿主，故障转移靠归属键过期加 reconcile。不碰插件，工作量约一天。</figcaption>
+    </figure>
+
+    <ul class="rkv">
+      <li><b>已具备</b>：Redis 归属键记录用户在哪台宿主；消息路由与宿主无关；用户数据在共享存储上；Web 入口按宿主返回。</li>
+      <li><b>待做</b>：BE 的宿主池配置、放置规则、按 health 的用户数做最少负载选择。</li>
+      <li><b>真正的边界</b>：每活跃用户一个 B 容器，OpenSandbox 要先能横向扩；大量用浏览器的用户会先把 A 的内存吃掉，那时按“用浏览器的用户”单独分组放置。</li>
+    </ul>
+  </section>
+
+  <div class="bridge"><b>方案可以扩。</b><span class="to">↓　但有几处要说清楚的缺口。</span></div>
+
+  <section id="s11">
+    <h2><span class="n">11</span>已知缺口与下一步</h2>
+    <p class="sub">按影响面排序，前两项需要你决定。</p>
+
+    <div class="card">
+      <table>
+        <tr><th style="width:26%">事项</th><th>现状</th><th style="width:30%">下一步</th></tr>
+        <tr><td>CodeGraph 不可用</td><td>它的 MCP 连接会一直占着 B 的流，B 永远不会空闲暂停，所以在共享宿主里暂时禁用</td><td>接受 B 常驻，或把它改成按需连接</td></tr>
+        <tr><td>bash 看不到个人环境变量</td><td>只放行 TZ、LANG、BE 地址几个；插件仍能读到用户的个人参数，但技能脚本直接从 env 读密钥会读不到</td><td>扩放行列表，或在创建 B 时注入</td></tr>
+        <tr><td>外部暂停 B 的边界</td><td>B 被 OpenSandbox API 从外部暂停后 5 秒内对话，6 轮里 3 轮空回答；自身空闲暂停不受影响</td><td>远程操作卡住时主动查沙箱状态</td></tr>
+        <tr><td>宿主进程级故障</td><td>插件异常已按用户隔离；Node 进程崩溃（如 OOM）会同时断掉全部用户，reconcile 几秒内重建</td><td>给宿主设内存上限并监控；多宿主后影响面自然缩小</td></tr>
+        <tr><td>浏览器仍在 A 上</td><td>每用户一个 Chromium 是 A 上最大的内存消耗</td><td>按浏览器用户分组放置，或把 browserd 移到 B</td></tr>
+        <tr><td>BE 容器 healthcheck</td><td>探测 8080 而服务在 8086，显示 unhealthy；与本方案无关，预先存在</td><td>改 healthcheck 端口</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="s12">
+    <h2><span class="n">12</span>代码与资料</h2>
+    <p class="sub">改动集一共 5 个提交，可独立审阅。</p>
+
+    <div class="links">
+      <a class="linkcard" href="https://github.com/beyonai/ByClaw/pull/312" target="_blank" rel="noopener">
+        <div class="lk-kind">▶ Pull Request</div><div class="lk-name">beyonai/ByClaw #312</div>
+        <div class="lk-desc">DSH 0.2.1 升级、工具环境拆分、插件按上下文可共享、宿主启动器、BE provider。</div>
+        <div class="lk-url">https://github.com/beyonai/ByClaw/pull/312</div></a>
+      <a class="linkcard" href="shared-dsh-host-benchmark-2026-10-20.html">
+        <div class="lk-kind">◆ 性能测试报告</div><div class="lk-name">内存与首词响应</div>
+        <div class="lk-desc">0 到 3 用户的内存、四种工具环境状态的首词、三用户并发；含复现脚本说明。</div>
+        <div class="lk-url">shared-dsh-host-benchmark-2026-10-20.html</div></a>
+    </div>
+
+    <div class="note">
+      <h2>代码位置（PR 分支 feat/dsh-tool-env-split）</h2>
+      <ul>
+        <li><strong>工具环境</strong>：<code>middleware/byclaw-harness/plugins/dsh-tool-env</code>，README 含全部配置项。</li>
+        <li><strong>宿主启动器</strong>：<code>middleware/byclaw-harness/scripts/byclaw-multi-host.mjs</code>，文件头注释即契约；同目录 <code>.test.mjs</code>。</li>
+        <li><strong>BE</strong>：<code>gateway/sandbox/runtime/SharedDshHostRuntimeProvider.java</code>、<code>SharedDshHostClient.java</code>，配置类 <code>SandboxProperties.SharedDshHostConfig</code>，装配在 <code>SandboxAutoConfiguration</code>。</li>
+        <li><strong>插件改动</strong>：各插件 README 和 schema 里的新配置键：<code>workspaceOnToolEnvironment</code>、<code>dshHome</code>、<code>ownsRuntime</code>、<code>forwardHostEnvironment</code>、<code>userId</code> 等。</li>
+      </ul>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<script>
+const links = [...document.querySelectorAll('#toc a')];
+const spy = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id)); });
+}, { rootMargin: '-10% 0px -72% 0px', threshold: 0 });
+links.forEach(a => { const s = document.getElementById(a.dataset.sec); if (s) spy.observe(s); });
+links.forEach(a => a.addEventListener('click', ev => {
+  ev.preventDefault();
+  const s = document.getElementById(a.dataset.sec);
+  if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  history.replaceState(null, '', '#' + a.dataset.sec);
+}));
+
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('annLayer');
+  const bar = document.getElementById('annBar');
+  const launch = document.getElementById('annLaunch');
+  const toggle = document.getElementById('annToggle');
+  const colorEl = document.getElementById('annColor');
+  const sizeEl = document.getElementById('annSize');
+  let on = false, tool = 'pen', drawing = false, cur = null, pts = [];
+  const strokes = [];
+  let fitting = false;
+  const fit = () => {
+    if (fitting) return;
+    fitting = true;
+    layer.style.width = '0px';
+    layer.style.height = '0px';
+    const w = document.documentElement.clientWidth;
+    const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    layer.setAttribute('width', w);
+    layer.setAttribute('height', h);
+    layer.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    fitting = false;
+  };
+  fit();
+  addEventListener('resize', fit);
+  new ResizeObserver(fit).observe(document.body);
+  const setOn = v => {
+    on = v;
+    document.body.classList.toggle('ann-on', on);
+    toggle.textContent = on ? '标注中' : '开启标注';
+    toggle.classList.toggle('on', on);
+  };
+  document.querySelectorAll('.ann-tool').forEach(b => b.addEventListener('click', () => {
+    tool = b.dataset.tool;
+    document.querySelectorAll('.ann-tool').forEach(x => x.classList.toggle('on', x === b));
+    if (!on) setOn(true);
+    strokes.forEach(s => { s.style.pointerEvents = tool === 'eraser' ? 'stroke' : 'none'; });
+  }));
+  toggle.addEventListener('click', () => setOn(!on));
+  document.getElementById('annUndo').addEventListener('click', () => { const last = strokes.pop(); if (last) last.remove(); });
+  document.getElementById('annClear').addEventListener('click', () => { while (strokes.length) strokes.pop().remove(); });
+  document.getElementById('annHide').addEventListener('click', () => { setOn(false); bar.classList.add('hidden'); launch.classList.add('show'); });
+  launch.addEventListener('click', () => { bar.classList.remove('hidden'); launch.classList.remove('show'); });
+  const at = e => { const r = layer.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  layer.addEventListener('pointerdown', e => {
+    if (!on || e.button !== 0) return;
+    if (tool === 'eraser') return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    drawing = true;
+    pts = [at(e)];
+    cur = document.createElementNS(NS, 'path');
+    const w = +sizeEl.value;
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke', colorEl.value);
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    if (tool === 'mark') { cur.setAttribute('stroke-width', w * 3.2); cur.setAttribute('stroke-opacity', '0.32'); cur.style.mixBlendMode = 'multiply'; }
+    else { cur.setAttribute('stroke-width', w); }
+    cur.style.pointerEvents = 'none';
+    cur.setAttribute('d', `M${pts[0][0]},${pts[0][1]}`);
+    layer.appendChild(cur);
+  });
+  layer.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = at(e), last = pts[pts.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1.6) return;
+    pts.push(p);
+    cur.setAttribute('d', cur.getAttribute('d') + `L${p[0]},${p[1]}`);
+  });
+  const end = () => { if (!drawing) return; drawing = false; if (pts.length < 2) { cur.remove(); } else { strokes.push(cur); } cur = null; };
+  layer.addEventListener('pointerup', end);
+  layer.addEventListener('pointercancel', end);
+  layer.addEventListener('pointerover', e => {
+    if (on && tool === 'eraser' && e.target !== layer) { const i = strokes.indexOf(e.target); if (i > -1) { strokes.splice(i, 1); e.target.remove(); } }
+  });
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape' && on) setOn(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && on) { e.preventDefault(); const last = strokes.pop(); if (last) last.remove(); }
+  });
+})();
+</script>
+</body>
+</html>

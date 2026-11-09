@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>调用模型：重试时前端怎么不重复 · ByClaw 新数据流</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  body { padding-right: 24px; }
+  .mini { max-width: 960px; margin: 0 auto; }
+  .tldr { margin-top: 14px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+  section { margin-top: 42px; }
+  .srcline { margin-top: 14px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
+  td code, .tr-body code { white-space: nowrap; }
+  .flow3 { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; gap: 8px; align-items: stretch; }
+  .arr { align-self: center; text-align: center; color: var(--clay); font-size: 18px; }
+  .scr { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px; }
+  .scr-h { font-size: 12px; font-weight: 600; color: var(--slate); margin-bottom: 10px; line-height: 1.5; }
+  .bub { font-size: 12.5px; line-height: 1.6; color: var(--slate); background: var(--gray-150); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .bub.done { background: rgba(120,140,93,0.14); color: var(--gray-700); }
+  .bub.hint { background: rgba(217,119,87,0.12); color: var(--rust); }
+  @media (max-width: 760px) { .flow3 { grid-template-columns: 1fr; } .arr { transform: rotate(90deg); } }
+</style>
+</head>
+<body>
+<div class="mini">
+  <a class="doc-home" href="byclaw-durable-roadmap-v2.html#p5">← 返回规划：一轮对话的新数据流</a>
+
+  <header>
+    <div class="eyebrow">新数据流 · 第 3 步详解</div>
+    <h1>调用模型：重试时前端怎么不重复</h1>
+    <p class="lead">重试时模型会生成一段新文字，和上次不会完全一样，所以没法靠给文字去重。正确的做法是告诉前端：上一次尝试作废了，用新的一次替换它。</p>
+    <div class="tldr"><b>结论</b>：宿主在 DSH 的一次尝试失败时，发出“开始新尝试”事件。前端和 BE 快照收到后清掉这一步未完成的文字，已完成的步骤不动。DSH 自己的客户端也是这样做的，这段逻辑从 rc.2 到最新版没有变化，不用等升级，也不依赖账本。</div>
+  </header>
+
+  <section id="g1">
+    <h2><span class="n">01</span>现在为什么可能重复</h2>
+    <p class="sub">宿主防得住同一次尝试内的重复，但下游并不知道“尝试”这回事。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:18%">环节</th><th style="width:44%">现在</th><th>后果</th></tr>
+        <tr><td>宿主</td><td>DSH 每次尝试有 <code>attemptId</code>，宿主按“尝试 + 序号”去重</td><td>只管同一次尝试；新尝试的序号重新开始，文字照常发出</td></tr>
+        <tr><td>BE 快照</td><td>收到增量就往回答后面追加</td><td>断线重连时拿到的快照也可能带着半截旧文字</td></tr>
+        <tr><td>前端</td><td>按 <code>streamId</code> 丢弃重投的帧，其余往后追加</td><td>新尝试的文字是新帧，会接在半截旧文字后面</td></tr>
+        <tr><td>结束时</td><td>BE 保存明确的最终答案</td><td>入库内容大概率正确，问题主要出现在生成过程中</td></tr>
+      </table>
+      <div class="delta">以上来自读代码的推断，还没有实测。需要先模拟一次模型中途断流来确认。</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Pi Durable 和 DSH 怎么做</h3>
+      <div class="tag">界面显示状态，不拼增量</div>
+      <p>Pi Durable 存的是“这次生成到目前为止的全文”，界面只显示最新值。崩溃后，半截内容转成一条标记为“已中断”的记录，不再进入模型上下文，然后重新请求。</p><p style="margin-top:8px"><b>DSH 的做法更接近我们的方案</b>：失败的尝试落盘后，它的客户端用这条持久事件替换这次尝试的临时文字，然后开始下一次尝试。ByClaw 只需把这个信号传到 BE 和前端。</p>
+    </div>
+  </section>
+
+  <section id="g2">
+    <h2><span class="n">02</span>用户看到什么</h2>
+    <p class="sub">下面是一次重试的过程，界面为示意。</p>
+    <div class="flow3">
+      <div class="scr"><div class="scr-h">① 模型输出到一半，连接断了</div><div class="bub done">✓ 第 1 步：已查询天气</div><div class="bub">明天北京多云，气温在 8 到…</div></div>
+      <div class="arr">→</div>
+      <div class="scr"><div class="scr-h">② 收到“开始新尝试”</div><div class="bub done">✓ 第 1 步：已查询天气</div><div class="bub hint">回答中断，正在重试（第 2 次）</div></div>
+      <div class="arr">→</div>
+      <div class="scr"><div class="scr-h">③ 新文字到达</div><div class="bub done">✓ 第 1 步：已查询天气</div><div class="bub">明天北京多云，气温 8 到 15 度，早晚较凉。</div></div>
+    </div>
+    <p class="srcline">已完成的第 1 步全程保留，只替换正在生成的第 2 步。</p>
+  </section>
+
+  <section id="g3">
+    <h2><span class="n">03</span>四条规则</h2>
+    <ol class="trace">
+      <li><div class="tr-head"><b>事件带上尝试信息</b></div><div class="tr-body"><p>每个文字事件带 <code>turn</code>、<code>step</code>、<code>attempt_id</code>、<code>index</code>，子 Agent 按各自的会话分开算。<code>attempt_id</code> 只在进程内有效，日志里没有，所以只用于实时显示，不要存下来；需要持久引用时用“会话 + turn + step + 序号”。</p></div></li>
+      <li><div class="tr-head"><b>新增“开始新尝试”事件</b></div><div class="tr-body"><p><code>assistant.attempt.start</code> 和文字走同一条 Redis 流，顺序有保证。触发时机是 DSH 的 <code>assistant/attempt</code> 事件（一次尝试失败落盘），不是 <code>llm/retry</code>，因为其他重试路径可能不写后者。BE 快照和前端收到后，清掉这个 step 未完成的文字和思考内容。</p></div></li>
+      <li><div class="tr-head"><b>丢弃旧帧</b></div><div class="tr-body"><p><code>attempt_id</code> 不是当前这次的，直接丢弃；<code>attempt_id + index</code> 相同的重投也丢弃。</p></div></li>
+      <li><div class="tr-head"><b>只有完整提交的回答才算数</b></div><div class="tr-body"><p>失败的半截不入库，宿主累积的回答文本也要一起重置。<b>例外</b>：用户主动停止时，回答带 <code>interrupted</code> 标记，这段文字要保留，不能清掉。工具调用由 DSH 保证落盘后才执行，不受影响。</p></div></li>
+    </ol>
+  </section>
+
+  <section id="g4">
+    <h2><span class="n">04</span>各种情况怎么走</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:30%">情况</th><th>处理</th></tr>
+        <tr><td>模型接口报错，宿主进程内重试</td><td>发出“开始新尝试”，前端替换这一步。这种情况不需要账本</td></tr>
+        <tr><td>宿主崩溃后重启（需要阶段 2 的续跑器）</td><td>DSH 恢复时把这一轮标记为中断，进行中的尝试不留记录。新一次尝试重新生成并发“开始新尝试”，半截文字在前端被替换；已完成的步骤不重做</td></tr>
+        <tr><td>重试时前端正好断线</td><td>快照已按新尝试清过，重连后整体替换，再接收新帧</td></tr>
+        <tr><td>旧尝试的帧迟到或重投</td><td>按规则 3 丢弃</td></tr>
+        <tr><td>子 Agent 的模型调用重试</td><td>只替换这个子 Agent 这一步的内容，主对话和其他成员不受影响</td></tr>
+        <tr><td>重试次数用完</td><td>明确显示这一轮失败，提示用户重试，不再一直转圈</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="g5">
+    <h2><span class="n">05</span>要改什么</h2>
+    <div class="g3">
+      <div class="card"><h3>宿主</h3><div class="tag">阶段 0</div><p>在事件里带上尝试信息，发出“开始新尝试”，新尝试时重置累积的回答文本。</p></div>
+      <div class="card"><h3>BE</h3><div class="tag">阶段 0</div><p>快照记下每个 step 的起点，收到新尝试就截回去；把事件字段原样转给前端。</p></div>
+      <div class="card"><h3>前端</h3><div class="tag">阶段 0</div><p>按 step 管理正在生成的文字，处理新尝试事件，丢弃旧帧，显示重试提示。</p></div>
+    </div>
+    <div class="note">
+      <h2>还没确认的</h2>
+      <ul>
+        <li>现在是否真的会重复显示：代码显示 ByClaw 会跨尝试追加，失败的轮次入库也可能带上半截（推断）；需要在验证环境模拟模型中途断流确认。</li>
+                <li>重试时半截文字怎么显示：当前按“直接清掉并提示”设计，实现最简单，但文字会闪一下；另一种是变灰保留、新文字到了再替换，前端要多一种显示状态。</li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="srcline">依据 ByClaw D0.6.0（57326a580）、DSH master ce7073d512（尝试相关代码与 rc.2 相同）和 Pi Durable 规格，均未运行。</p>
+</div>
+</body>
+</html>

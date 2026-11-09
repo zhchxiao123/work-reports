@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快照、克隆与回滚：Agent 沙箱的新安全问题（文章总结）</title>
+<style>
+  :root {
+    --ivory:   #FAF9F5;
+    --slate:   #141413;
+    --clay:    #D97757;
+    --oat:     #E3DACC;
+    --olive:   #788C5D;
+    --rust:    #B04A3F;
+    --gray-150:#F0EEE6;
+    --gray-300:#D1CFC5;
+    --gray-500:#87867F;
+    --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--slate); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 28px 24px 96px; }
+  body { padding-right: 104px; }
+  @media (max-width: 980px) { body { padding-right: 24px; } }
+  .sheet { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 34px; align-items: start; }
+  .sidenav { position: sticky; top: 28px; }
+  .brand { margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1.5px solid var(--gray-300); }
+  .brand-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay); margin-bottom: 7px; }
+  .brand-title { font-family: var(--serif); font-weight: 500; font-size: 17px; line-height: 1.4; letter-spacing: -0.01em; color: var(--slate); }
+  .brand-sub { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--gray-500); }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { font-size: 12px; color: var(--gray-500); text-decoration: none; padding: 6px 9px; border: 1.2px solid transparent; border-radius: 7px; display: flex; align-items: baseline; gap: 7px; line-height: 1.4; transition: color 120ms ease, background 120ms ease, border-color 120ms ease; }
+  .toc a:hover { color: var(--slate); background: var(--gray-150); }
+  .toc a.on { color: var(--slate); font-weight: 600; background: #fff; border-color: var(--gray-300); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--clay); flex-shrink: 0; }
+  .toc a.on .num { color: var(--rust); }
+  .navhint { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--gray-150); font-size: 10px; line-height: 1.6; color: var(--gray-500); }
+  @media (max-width: 980px) {
+    .sheet { grid-template-columns: 1fr; gap: 24px; }
+    .sidenav { position: static; }
+    .brand-title { font-size: 20px; }
+    .toc { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .toc a { padding: 8px 13px; }
+    .navhint { display: none; }
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 33px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .lead { font-size: 14.5px; line-height: 1.75; color: var(--gray-700); max-width: 830px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+  section { margin-top: 58px; scroll-margin-top: 24px; }
+  section > h2 { font-family: var(--serif); font-weight: 500; font-size: 25px; margin-bottom: 8px; }
+  section > .sub { font-size: 13.5px; color: var(--gray-700); line-height: 1.7; max-width: 830px; margin-bottom: 22px; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--clay); margin-right: 8px; font-weight: 600; }
+  .warn { color: var(--rust); font-weight: 600; }
+  .good { color: var(--olive); font-weight: 600; }
+  .thesis { background: var(--slate); color: #fff; border-radius: 16px; padding: 30px 34px; }
+  .t-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 14px; }
+  .t-main { font-family: var(--serif); font-size: 26px; line-height: 1.5; font-weight: 500; margin-bottom: 16px; }
+  .t-main em { font-style: normal; color: var(--clay); }
+  .thesis p { font-size: 13.5px; line-height: 1.75; color: #C8C6BE; max-width: 800px; }
+  .thesis p + p { margin-top: 10px; }
+  .thesis strong { color: #fff; font-weight: 600; }
+  .thesis code { background: rgba(255,255,255,0.1); color: #E3DACC; }
+  @media (max-width: 700px) { .t-main { font-size: 21px; } }
+  .bridge { margin: 42px 0 -14px; padding: 4px 0 4px 20px; border-left: 3px solid var(--clay); font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--slate); }
+  .bridge b { font-weight: 600; }
+  .bridge .to { display: block; margin-top: 7px; font-family: var(--sans); font-size: 13px; color: var(--gray-700); font-weight: 400; }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 22px 24px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; margin-bottom: 4px; }
+  .card .tag { font-size: 11.5px; color: var(--gray-500); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-150); }
+  .card p { font-size: 13px; line-height: 1.7; color: var(--gray-700); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  figure { border: 1.5px solid var(--gray-300); border-radius: 14px; background: #fff; padding: 20px 22px 16px; margin-bottom: 16px; }
+  figure > svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.7; color: var(--gray-700); }
+  figcaption b { color: var(--slate); font-weight: 600; }
+  .fig-h { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .fig-h span { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 400; }
+  .rf text { font-family: var(--sans); font-size: 11.5px; fill: var(--slate); }
+  .rf .lab  { font-size: 11px; fill: var(--gray-700); }
+  .rf .mono { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+  .rf .tiny { font-size: 9.5px; fill: var(--gray-500); }
+  .rf .bar-n  { fill: var(--gray-300); }
+  .rf .bar-x  { fill: var(--clay); }
+  .rf .bar-ok { fill: var(--olive); }
+  .rf .box    { fill: #fff; stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-d  { fill: var(--gray-150); stroke: var(--gray-300); stroke-width: 1.5; }
+  .rf .box-x  { fill: rgba(217,119,87,0.12); stroke: var(--clay); stroke-width: 1.5; }
+  .rf .box-ok { fill: rgba(120,140,93,0.14); stroke: var(--olive); stroke-width: 1.5; }
+  .rf .ln   { stroke: var(--gray-500); stroke-width: 1.5; fill: none; }
+  .rf .ln-d { stroke: var(--rust); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .rf .base { stroke: var(--gray-300); stroke-width: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1.5px solid var(--gray-300); padding: 7px 10px 7px 0; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--gray-150); padding: 8px 10px 8px 0; line-height: 1.6; color: var(--gray-700); vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--slate); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .col-old { color: var(--gray-500); }
+  .delta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-150); font-size: 12.5px; line-height: 1.8; color: var(--gray-700); }
+  .delta b { color: var(--slate); }
+  ul.rkv { list-style: none; }
+  ul.rkv li { font-size: 12.5px; line-height: 1.7; color: var(--gray-700); padding: 8px 0 8px 16px; position: relative; border-bottom: 1px solid var(--gray-150); }
+  ul.rkv li:last-child { border-bottom: none; }
+  ul.rkv li::before { content: "▸"; position: absolute; left: 0; color: var(--clay); font-size: 10px; top: 10px; }
+  ul.rkv b { color: var(--slate); font-weight: 600; }
+  ol.trace { list-style: none; counter-reset: tr; margin-bottom: 18px; }
+  ol.trace > li { counter-increment: tr; position: relative; border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 15px 18px 13px 52px; margin-bottom: 10px; }
+  ol.trace > li::before { content: counter(tr); position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%; background: var(--gray-150); border: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; color: var(--gray-700); display: flex; align-items: center; justify-content: center; }
+  ol.trace > li:not(:last-child)::after { content: ""; position: absolute; left: 27.5px; top: 43px; height: calc(100% - 32px); width: 1.5px; background: var(--gray-150); }
+  .tr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .tr-head b { font-size: 14px; font-weight: 600; color: var(--slate); }
+  .tr-stage { font-family: var(--mono); font-size: 10.5px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .tr-body p { font-size: 12.5px; line-height: 1.75; color: var(--gray-700); margin-bottom: 7px; }
+  .tr-body p:last-child { margin-bottom: 0; }
+  .tr-body b { color: var(--slate); font-weight: 600; }
+  .tr-body .tr-block { background: var(--gray-150); border-radius: 7px; padding: 7px 11px; font-size: 12px; color: var(--gray-700); margin-top: 9px; font-family: var(--mono); overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #fff; padding: 14px 16px 12px; }
+  .stat .s-num { font-family: var(--serif); font-size: 26px; line-height: 1.1; color: var(--slate); margin-bottom: 4px; }
+  .stat .s-num em { font-style: normal; font-size: 14px; color: var(--gray-500); }
+  .stat .s-lab { font-size: 11.5px; color: var(--gray-700); line-height: 1.5; }
+  .stat .s-sub { font-family: var(--mono); font-size: 10px; color: var(--gray-500); margin-top: 4px; }
+  .stat.hot { border-color: var(--clay); background: rgba(217,119,87,0.05); }
+  .stat.hot .s-num { color: var(--rust); }
+  .badge { font-family: var(--mono); font-size: 10px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+  .badge.ok   { background: rgba(120,140,93,0.14); border: 1px solid var(--olive); color: var(--olive); }
+  .badge.part { background: rgba(217,119,87,0.12); border: 1px solid var(--clay); color: var(--rust); }
+  .badge.no   { background: var(--gray-150); border: 1px solid var(--gray-300); color: var(--gray-500); }
+  .note { margin-top: 44px; border: 1.5px solid var(--oat); background: #fff; border-radius: 14px; padding: 20px 22px; }
+  .note h2 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin-bottom: 10px; }
+  .note ul { list-style: none; }
+  .note li { font-size: 13.5px; line-height: 1.75; color: var(--gray-700); padding-left: 18px; position: relative; margin-bottom: 7px; }
+  .note li::before { content: "◦"; position: absolute; left: 2px; color: var(--clay); }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .chip { width: 22px; height: 14px; border: 1.5px solid var(--gray-300); border-radius: 4px; background: #fff; }
+  .chip.x { background: var(--clay); border-color: var(--clay); }
+  .chip.ok { background: var(--olive); border-color: var(--olive); }
+  .chip.n { background: var(--gray-300); }
+  #annLayer { position: absolute; top: 0; left: 0; z-index: 40; pointer-events: none; overflow: visible; }
+  body.ann-on #annLayer { pointer-events: auto; cursor: crosshair; }
+  body.ann-on { user-select: none; -webkit-user-select: none; }
+  .ann-bar { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 4px; background: #fff; border: 1.5px solid var(--gray-300); border-radius: 13px; padding: 9px 7px; box-shadow: 0 6px 22px rgba(20,20,19,0.12); width: 74px; opacity: 0.94; }
+  .ann-bar.hidden { display: none; }
+  .ann-bar:hover { opacity: 1; }
+  .ann-bar button { font-family: inherit; font-size: 11px; color: var(--gray-700); background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 8px; padding: 6px 2px; cursor: pointer; white-space: nowrap; width: 100%; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .ann-bar button:hover { background: #fff; color: var(--slate); }
+  .ann-bar button.on { background: var(--clay); border-color: var(--clay); color: #fff; font-weight: 600; }
+  .ann-bar button.primary { background: var(--slate); border-color: var(--slate); color: #fff; font-weight: 600; }
+  .ann-bar button.primary.on { background: var(--clay); border-color: var(--clay); }
+  .ann-bar .sep { height: 1px; width: 100%; background: var(--gray-300); margin: 4px 0 3px; }
+  .ann-bar input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--gray-300); border-radius: 7px; background: none; cursor: pointer; }
+  .ann-bar input[type=range] { width: 100%; accent-color: var(--clay); cursor: pointer; margin: 2px 0; }
+  .ann-launch { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); z-index: 60; display: none; font-family: inherit; font-size: 12px; color: var(--gray-700); background: #fff; border: 1.5px solid var(--gray-300); border-radius: 10px; padding: 14px 7px; cursor: pointer; box-shadow: 0 6px 22px rgba(20,20,19,0.12); writing-mode: vertical-rl; letter-spacing: 0.1em; }
+  .ann-launch.show { display: block; }
+  .ann-launch:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .ann-bar { width: 72px; padding: 8px 6px; right: 8px; } .ann-bar button { font-size: 11px; padding: 5px 2px; } }
+  @media print { .ann-bar, .ann-launch, .sidenav { display: none !important; } }
+  .doc-home { display: inline-block; margin-bottom: 14px; font-size: 12px; color: var(--gray-700); text-decoration: none; border: 1.2px solid var(--gray-300); border-radius: 999px; padding: 4px 11px; background: #fff; }
+  .doc-home:hover { color: var(--slate); border-color: var(--clay); }
+  @media (max-width: 980px) { .doc-home { margin-bottom: 10px; } }
+  body { padding-right: 24px; }
+  .mini { max-width: 960px; margin: 0 auto; }
+  .tldr { margin-top: 14px; border-left: 3px solid var(--clay); background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13.5px; line-height: 1.7; color: var(--gray-700); }
+  .tldr b { color: var(--rust); margin-right: 4px; }
+  .lead b { color: var(--slate); }
+  section { margin-top: 42px; }
+  .srcline { margin-top: 24px; font-size: 11.5px; line-height: 1.7; color: var(--gray-500); }
+  .more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 14px; font-size: 12px; }
+  .more span { font-family: var(--mono); font-size: 10.5px; color: var(--gray-500); }
+  .more a { color: var(--gray-700); text-decoration: none; border-bottom: 1px dashed var(--gray-300); }
+  .more a:hover { color: var(--rust); }
+  td a { color: var(--rust); }
+  .card p i { font-style: italic; }
+</style>
+</head>
+<body>
+<div class="mini">
+  <a class="doc-home" href="agent-infrastructure-briefing-v2.html#a7">← 返回汇报：安全</a>
+  <header>
+    <div class="eyebrow">文章总结 · 沙箱安全</div>
+    <h1>快照、克隆与回滚：Agent 沙箱的新安全问题</h1>
+    <p class="lead">沙箱能休眠、能快照、能克隆之后，状态就从运行时的临时产物变成了需要长期保管的资产。清理也从“删一个容器”变成了“删一串副本”。安全边界从进程扩展到了状态。</p>
+    <div class="tldr"><b>一句话</b>：休眠和快照解决了成本与续跑，但凭证、登录态和上下文也跟着落盘了。这些状态要像资产一样管理：谁能读、谁能恢复、保留多久、谁来删。</div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="n">01</span>Agent 的状态有六类，处理方式不同</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:17%">状态</th><th style="width:43%">包括</th><th style="width:16%">能否重建</th><th>处理方式</th></tr>
+        <tr><td>模型上下文</td><td>对话历史、工具返回、计划</td><td>可以，费用高</td><td>放在应用侧</td></tr>
+        <tr><td>文件系统</td><td>工作目录、生成物、修改过的配置</td><td>可以，结果未必一致</td><td>持久化</td></tr>
+        <tr><td>运行环境</td><td>依赖、编译产物、环境变量</td><td>可以，版本未必一致</td><td>镜像或模板</td></tr>
+        <tr><td>会话凭据</td><td>Cookie、OAuth 令牌、SSH 密钥、云凭证</td><td>不能，只能轮换</td><td><b>重点保护</b></td></tr>
+        <tr><td>进程内存</td><td>堆、栈、文件描述符、数据库连接</td><td>不能，只能快照</td><td>快照，且要加密</td></tr>
+        <tr><td>外部副作用</td><td>已发的消息、已下的订单</td><td>不可撤销</td><td>记录并补偿</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="n">02</span>三个后果</h2>
+    <div class="g3">
+      <div class="card"><h3>快照成为资产</h3><div class="tag">谁能恢复，谁就有全部权限</div><p>快照里可能有解密后的密钥、会话令牌和上下文。它是独立资源，权限容易配宽；任务结束、沙箱删除后，快照可能还在，还可能被复制到别的区域。</p></div>
+      <div class="card"><h3>克隆放大风险</h3><div class="tag">一份状态变成 N 份</div><p>凭证和被注入的恶意指令都会跟着复制。业务要求各实例状态一致，安全要求凭证、网络身份和审计标识各不相同。出事后也很难判断污染从哪来。</p></div>
+      <div class="card"><h3>回滚带回旧事实</h3><div class="tag">恢复的状态可能从未真实存在过</div><p>已撤销的令牌重新有效，被拒绝的审批回到待批准，被隔离的文件又出现了。审计时间线也会断裂。</p></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>论文实证：正确的回滚不等于安全的恢复</h3>
+      <div class="tag">arXiv 2608.29381，已核对摘要</div>
+      <p>论文 <i>Safe to Resume?</i> 在 Hermes、Cline、LangGraph 上构造了三类端到端攻击：绕过恶意代码验证、未授权转发邮件、重复支付，并归纳出五种失败形态。</p>
+    </div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="n">03</span>文章建议的五条防御</h2>
+    <ol class="trace">
+      <li><div class="tr-head"><b>状态分级</b></div><div class="tr-body"><p>按可重建、需保护、只能快照、不可撤销分类，各定保留期和加密要求，并落到策略上。</p></div></li>
+      <li><div class="tr-head"><b>快照密钥分域</b></div><div class="tr-body"><p>快照加密密钥和沙箱运行时密钥不放在同一个信任域。</p></div></li>
+      <li><div class="tr-head"><b>克隆前剥离</b></div><div class="tr-body"><p>先剔除凭据和 Cookie，克隆后按实例重新注入短时凭证。</p></div></li>
+      <li><div class="tr-head"><b>回滚后再验证</b></div><div class="tr-body"><p>重新校验凭证是否有效、审批是否成立、外部副作用是否发生；不成立就阻断并转人工。回滚本身也要授权。</p></div></li>
+      <li><div class="tr-head"><b>状态血缘</b></div><div class="tr-body"><p>记录快照和克隆的来源、时间、敏感内容、使用范围，删除时级联。</p></div></li>
+    </ol>
+  </section>
+
+  <section id="s4">
+    <h2><span class="n">04</span>对 ByClaw 意味着什么</h2>
+    <p class="sub">这一节是我们的判断，不是原文内容。</p>
+    <div class="card">
+      <table>
+        <tr><th style="width:24%">能力</th><th style="width:20%">我们的规划</th><th>怎么处理</th></tr>
+        <tr><td>休眠和快照</td><td>如果启用</td><td>凭证不进快照；唤醒后重新注入短时凭证；明确快照的加密、权限和保留期</td></tr>
+        <tr><td>持久家目录</td><td>已在使用</td><td>里面有浏览器和 CLI 登录，要规定保留期和清理责任</td></tr>
+        <tr><td>批量克隆</td><td>如果启用</td><td>克隆前剥离凭证；预热模板不放任何用户状态</td></tr>
+        <tr><td>回滚</td><td>规划里不用</td><td>重启续跑是沿只追加的日志往下走，不把状态退回过去</td></tr>
+        <tr><td>重启后续跑</td><td>规划中</td><td>工具结果未知时由模型先核实；外部动作可能重复，所以建议只有只读类任务自动续跑</td></tr>
+      </table>
+    </div>
+    <div class="note">
+      <h2>阅读时注意</h2>
+      <ul>
+        <li>原文是公众号个人作者的文章，我们只核对了它引用的这篇论文的摘要；原文引用的其他学术数字和厂商数字没有逐条核实，这里也没有转述。</li>
+        <li>文章讲的是风险和设计原则，没有针对阿里云或 E2B 的具体漏洞。</li>
+      </ul>
+    </div>
+    <div class="more"><span>延伸阅读</span><a href="https://mp.weixin.qq.com/s?__biz=MzY5MDQ3MjA2Nw%3D%3D&mid=2247484928&idx=1&sn=5670c9c9aec2e10eec0f1c0b7e762c7a" target="_blank" rel="noopener">阅读原文 ↗</a><a href="https://arxiv.org/abs/2608.29381" target="_blank" rel="noopener">论文 Safe to Resume? ↗</a><a href="agent-infrastructure-briefing-v2.html#a7">汇报：安全 →</a><a href="byclaw-durable-ledger-v2.html#l4">宿主重启后怎么接 →</a></div>
+  </section>
+  <p class="srcline">原文作者“是熊大先生呢”（USTCSweet）。本页为摘要，版权归原作者所有。</p>
+</div>
+</body>
+</html>
