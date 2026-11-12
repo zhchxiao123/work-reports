@@ -15,6 +15,7 @@
     {"group": "byclaw", "file": "shared-dsh-n-tools-architecture.html", "date": "2026-10-13", "title": "共享 DSH A + N 工具沙箱：架构与实现", "desc": "一个 A 对多个工具沙箱的架构和实现落点。"},
     {"group": "byclaw", "file": "dsh-multitenancy-implementation.html", "date": "2026-10-13", "title": "DSH 多租户接入：实现逻辑深析", "desc": "DSH 多租户接入的实现逻辑。"},
 
+    {"group": "measure", "file": "session-db-loadtest-229-2026-11-12.html", "date": "2026-11-12", "title": "DSH 会话存储入库压测报告（229）", "desc": "会话日志存进 openGauss 扛不扛得住：3,000 会话 p99 14 ms、5,000 会话开始排队，全程零错误。"},
     {"group": "measure", "file": "harness-capacity-report-2026-11-05.html", "date": "2026-11-06", "title": "Harness 单进程承载能力测试报告", "desc": "单进程能撑多少用户，openGauss 会话库与 WebSocket 长连接的测试结果。"},
     {"group": "measure", "file": "shared-dsh-host-benchmark-2026-10-20.html", "date": "2026-10-20", "title": "共享 DSH 宿主性能测试报告", "desc": "共享宿主在多用户下的性能实测。"},
     {"group": "measure", "file": "cubesandbox-cluster-deployment.html", "date": "2026-10-13", "title": "CubeSandbox 双节点集群部署手册", "desc": "从 0 到 1 搭建双节点 CubeSandbox 集群。"},

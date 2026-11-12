@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH 会话存储入库压测报告 · 229 · 2026-11-12</title>
+<style>
+:root{
+  --surface-0:#f4f4f2; --surface-1:#fcfcfb; --border:#e3e2dc; --grid:#ecebe6;
+  --text-primary:#0b0b0b; --text-secondary:#55544f; --text-muted:#85847d;
+  --series-1:#2a78d6; --series-2:#1baf7a; --series-3:#eb6834;
+  --good:#0d7a3e; --warn:#a15c00;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface-0:#121211; --surface-1:#1a1a19; --border:#2e2e2b; --grid:#272724;
+    --text-primary:#f0efec; --text-secondary:#c3c2b7; --text-muted:#8f8e86;
+    --series-1:#3987e5; --series-2:#199e70; --series-3:#d95926;
+    --good:#4cc47f; --warn:#e3a33a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-0);color:var(--text-primary);font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:28px;line-height:1.3;margin:0 0 6px}
+.sub{color:var(--text-secondary);margin:0 0 28px}
+h2{font-size:20px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+h2 .no{color:var(--text-muted);font-weight:500;margin-right:8px}
+p{margin:8px 0}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin:14px 0}
+.lead{font-size:18px;font-weight:600;margin:0 0 6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:16px 0}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile .k{color:var(--text-secondary);font-size:13px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text-secondary);font-weight:600}
+.tw{overflow-x:auto}
+.note{color:var(--text-secondary);font-size:13.5px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text-secondary)}
+.ok{color:var(--good);font-weight:600}
+.w{color:var(--warn);font-weight:600}
+ul{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--grid);padding:1px 5px;border-radius:4px}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--text-secondary);margin:4px 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:22px;height:0;border-top:2px solid}
+.sw.d{border-top-style:dashed}
+.tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;min-width:150px;font-variant-numeric:tabular-nums}
+.tip b{display:block;margin-bottom:4px}
+.tip .r{display:flex;justify-content:space-between;gap:12px;color:var(--text-secondary)}
+.tip .r i{font-style:normal;color:var(--text-primary)}
+</style>
+<style id="wr-home-style">.wr-home{display:inline-block;margin-bottom:14px;font-size:12px;color:#87867F;text-decoration:none;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}.wr-home:hover{color:#B04A3F}</style>
+</head>
+<body>
+<main>
+<header class="page-head">
+    <a class="wr-home" href="index.html">← 工作报告首页</a>
+<h1>DSH 会话存储入库压测报告</h1>
+<p class="sub">229 测试环境 · 2026-11-12 上午 · 被测代码：<code>feat/dsh-session-db-d060</code> @ <code>0b3745af3</code>（镜像 <code>dsh-session-db-0b3745af3_slim</code>）</p>
+</header>
+
+<h2><span class="no">01</span>结论</h2>
+<div class="card">
+  <p class="lead">229 的 openGauss 存会话日志绰绰有余：3,000 个会话同时跑回合，每次写入 p99 只要 14 ms。</p>
+  <p>到 5,000 个会话开始排队（p99 47 ms），但全程零错误，BE 健康检查始终 2–4 ms，没有拖慢平台其他功能。比 11-02 在 118 上测的结果好很多，同样 3,000 会话，118 的 p99 是 65 ms。</p>
+</div>
+<div class="tiles">
+  <div class="tile"><div class="v">13.8 ms</div><div class="k">3,000 活跃会话的写入 p99（约 1,070 事务/秒）</div></div>
+  <div class="tile"><div class="v">46.6 ms</div><div class="k">5,000 活跃会话的写入 p99（开始排队，约 1,740 事务/秒）</div></div>
+  <div class="tile"><div class="v">0</div><div class="k">全部 6 档、约 35 万次写入里的错误数</div></div>
+  <div class="tile"><div class="v">≤ 3.6 ms</div><div class="k">压测期间 BE 健康检查的最大耗时</div></div>
+</div>
+<div class="card">
+  <table>
+    <tr><th>问题</th><th style="text-align:left">答案</th></tr>
+    <tr><td>能不能扛住？</td><td style="text-align:left;white-space:normal"><span class="ok">能。</span>229 上真实同时在线的用户远少于 3,000，写入不会成为瓶颈。</td></tr>
+    <tr><td>会不会影响别人？</td><td style="text-align:left;white-space:normal">3,000 档数据库平均用约 0.8 核（这台机 24 核），连接数最高 79（上限 200），BE 无感。5,000 档数据库峰值用到约 2.5 核。</td></tr>
+    <tr><td>恢复会话快不快？</td><td style="text-align:left;white-space:normal">单个会话读回 p50 2.5 ms，长会话 3.6 ms；列出一个用户 3,004 个会话 5–7 ms。</td></tr>
+    <tr><td>占多少盘？</td><td style="text-align:left;white-space:normal">每个事件约 2.0 KB，和 118 一致。100 万事件约 1.9 GB。</td></tr>
+  </table>
+</div>
+
+<h2><span class="no">02</span>怎么测的</h2>
+<p>用真实会话日志、真实插件代码、229 上真实的 openGauss。宿主和模型是模拟的：发压进程代替 harness 上下文，按日志原有节奏写入。</p>
+<div class="card tw">
+<table>
+  <tr><th>项目</th><th style="text-align:left">内容</th></tr>
+  <tr><td>环境</td><td style="text-align:left;white-space:normal">229：24 核、92 GB、数据盘 NVMe。openGauss（<code>byclaw-opengauss-middleware</code>）<code>shared_buffers</code> 1 GB，<code>max_connections</code> 200，测前约 42 条连接、CPU 3%。工作日上午，平台上有其他人在用。</td></tr>
+  <tr><td>被测代码</td><td style="text-align:left;white-space:normal">新镜像里的 <code>@byclaw/dsh-db/session</code> 插件原样加载，经 <code>ctx.sessionPersistence</code> 调用，和 xzc 宿主上跑的是同一份代码。</td></tr>
+  <tr><td>数据</td><td style="text-align:left;white-space:normal">11-02/05 在 118 上收集的 724 个真实会话（89 MB）；写进单独的 schema <code>sdb_load_229</code>，没碰 <code>byai</code> 下的业务表，测完已整体删除。</td></tr>
+  <tr><td>节奏</td><td style="text-align:left;white-space:normal">按事件原始时间回放，超过 30 秒的间隔截断，所以“活跃会话”指一直在跑回合的会话。在模型请求、工具调用和步骤开始处提交，并按 200 ms 窗口分批，和 11-02 完全相同，结果可直接对比。</td></tr>
+  <tr><td>发压</td><td style="text-align:left;white-space:normal">1 个容器（限 4 核 4 GB）里 4 个进程模拟 4 台宿主，每个连接池 8 条，最多额外占 32 条连接。每档 90 秒，前 20 秒不计入；5,000 档缩短为 60 秒。</td></tr>
+  <tr><td>保护</td><td style="text-align:left;white-space:normal">每 4 秒采样 BE 健康检查；连续 3 次超过 2 秒或非 200 就自动停止发压。全程未触发。</td></tr>
+</table>
+</div>
+<p class="note">延迟的含义：一次写入事务从发起到提交，包含等连接池的时间。这就是回合里每次落盘要等的时间。</p>
+
+<h2><span class="no">03</span>写入容量</h2>
+<p>3,000 活跃以内，中位数基本不变（约 1.5 ms），尾部缓慢上升。5,000 时 p99 跳到 47 ms、p999 145 ms，开始排队。全程没有写入错误。</p>
+<div class="card chart" id="chart">
+  <div style="font-weight:600">图 1 · 写入延迟随活跃会话数变化</div>
+  <div class="note">对数纵轴 · 横轴不等距 · 悬停看数值</div>
+  <div class="legend" aria-hidden="true">
+    <span><i class="sw" style="border-color:var(--series-1)"></i>229 p99</span>
+    <span><i class="sw" style="border-color:var(--series-2)"></i>229 p50</span>
+    <span><i class="sw d" style="border-color:var(--series-3)"></i>118 p99（11-02）</span>
+  </div>
+  <svg id="svg" viewBox="0 0 900 380" role="img" aria-label="写入延迟折线图，数据见下表"></svg>
+  <div class="tip" id="tip"></div>
+</div>
+<div class="card tw">
+<table>
+  <tr><th>活跃会话</th><th>事务/秒</th><th>事件/秒</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th><th>p999 ms</th><th>最大 ms</th><th>错误</th></tr>
+  <tr><td>100</td><td>32.5</td><td>87</td><td>1.7</td><td>3.3</td><td>6.5</td><td>10.7</td><td>13</td><td>0</td></tr>
+  <tr><td>500</td><td>173</td><td>464</td><td>1.5</td><td>4.3</td><td>5.9</td><td>13.0</td><td>27</td><td>0</td></tr>
+  <tr><td>1,000</td><td>352</td><td>954</td><td>1.5</td><td>4.8</td><td>7.4</td><td>17.5</td><td>33</td><td>0</td></tr>
+  <tr><td>2,000</td><td>697</td><td>1,869</td><td>1.5</td><td>5.0</td><td>10.8</td><td>21.5</td><td>34</td><td>0</td></tr>
+  <tr><td>3,000</td><td>1,073</td><td>2,889</td><td>1.5</td><td>5.3</td><td><b>13.8</b></td><td>26.9</td><td>43</td><td>0</td></tr>
+  <tr><td>5,000</td><td>1,737</td><td>4,651</td><td>1.6</td><td>8.9</td><td><b class="w">46.6</b></td><td>145</td><td>189</td><td>0</td></tr>
+</table>
+</div>
+<p class="note">没有测到饱和点。11-02 在 118 上不加间隔持续写入的极限约 2,400 事务/秒；229 在 5,000 档已经到 1,740 事务/秒且仍零错误，为避免影响共享环境上的其他用户，没有再往上加。</p>
+
+<h2><span class="no">04</span>对平台的影响</h2>
+<p>数据库 CPU 随负载线性增长，BE 完全无感。“CPU” 是容器占用，100% = 1 核。</p>
+<div class="card tw">
+<table>
+  <tr><th>活跃会话</th><th>数据库 CPU 平均</th><th>数据库 CPU 峰值</th><th>库总连接峰值</th><th>数据盘写入 MB/s</th><th>BE 健康检查最大 ms</th></tr>
+  <tr><td>100</td><td>5%</td><td>12%</td><td>51</td><td>2.6</td><td>3.0</td></tr>
+  <tr><td>500</td><td>16%</td><td>39%</td><td>59</td><td>9.1</td><td>3.2</td></tr>
+  <tr><td>1,000</td><td>32%</td><td>46%</td><td>69</td><td>17.6</td><td>2.8</td></tr>
+  <tr><td>2,000</td><td>58%</td><td>110%</td><td>78</td><td>35.5</td><td>2.9</td></tr>
+  <tr><td>3,000</td><td>81%</td><td>167%</td><td>79</td><td>39.8</td><td>2.7</td></tr>
+  <tr><td>5,000</td><td>120%</td><td>246%</td><td>78</td><td>55.0</td><td>3.6</td></tr>
+</table>
+</div>
+<p class="note">数据盘的 “util” 在 2,000 档以上显示 95–99%，但 NVMe 并行处理请求，这个数字不代表饱和；写入延迟本身没有异常。数据盘同时承载 NFS（沙箱文件）和 Docker，写入峰值 55 MB/s 时没有看到其他服务告警。</p>
+
+<h2><span class="no">05</span>会话恢复与列表</h2>
+<p>宿主重启或换宿主后，会话要从库里整段读回。单个读很快；并发高时排队在连接池上（池只有 8 条）。</p>
+<div class="card tw">
+<table>
+  <tr><th>场景</th><th>并发</th><th>平均事件数</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th><th>最大 ms</th><th>失败</th></tr>
+  <tr><td>随机会话</td><td>1</td><td>32</td><td>2.5</td><td>4.1</td><td>5.4</td><td>16</td><td>0</td></tr>
+  <tr><td>随机会话</td><td>10</td><td>32</td><td>10.8</td><td>18.6</td><td>34.4</td><td>40</td><td>0</td></tr>
+  <tr><td>随机会话</td><td>50</td><td>32</td><td>51.6</td><td>96.1</td><td>97.7</td><td>98</td><td>0</td></tr>
+  <tr><td>随机会话</td><td>200</td><td>32</td><td>362</td><td>372</td><td>372</td><td>373</td><td>0</td></tr>
+  <tr><td>最长会话</td><td>1</td><td>113</td><td>3.6</td><td>7.1</td><td>18.7</td><td>19</td><td>0</td></tr>
+  <tr><td>最长会话</td><td>10</td><td>113</td><td>20.7</td><td>44.2</td><td>48.0</td><td>48</td><td>0</td></tr>
+  <tr><td>列出一个用户的 3,004 个会话</td><td>1</td><td>—</td><td colspan="4" style="text-align:center">5 次分别为 6 / 7 / 5 / 5 / 5 ms</td><td>0</td></tr>
+</table>
+</div>
+<p class="note">这次的测试会话比较短（每档只跑 90 秒，最长 127 个事件）。11-02 在 118 上测过 770 万事件、15 GB 的大表，长会话集中恢复约 3 秒；229 这次没有重做大表测试。</p>
+
+<h2><span class="no">06</span>真实链路</h2>
+<p>压测之外，11-11 已经用 用户A 在 229 前端发过真实对话，路径是前端 → BE → xzc 宿主（新镜像）→ openGauss：</p>
+<ul>
+  <li><code>byai.dsh_session</code> / <code>dsh_session_event</code> 写入了 3 个会话，每个 22 个事件，用户消息和模型回复都在。</li>
+  <li><code>dsh_storage_unit</code> 存了工作区、会话列表、定时任务等 5 个单元；<code>dsh_host_file</code> 存了加密后的凭据文件和写入权标记。</li>
+</ul>
+
+<h2><span class="no">07</span>没测到的</h2>
+<ul>
+  <li><b>饱和点和拐点</b>：为不影响共享环境，最高只到 5,000 活跃会话、60 秒。</li>
+  <li><b>同一会话的多轮续写、宿主重启后从库里恢复上下文</b>：真实链路上还没验证，前端测试时 SSH 隧道不稳，第二轮没发出去。</li>
+  <li><b>数据库故障</b>（重启、断连）：11-02 在 118 上测过并修了一个会让宿主崩溃的 bug，这次没重测。</li>
+  <li><b>大表</b>：本次测试表最大约 100 万事件、1.9 GB。</li>
+  <li><b>工具沙箱</b>：配套的 <code>_tools</code> 镜像还没打，xzc 上执行命令的链路还不通，与会话存储无关。</li>
+</ul>
+
+<h2><span class="no">08</span>建议</h2>
+<ul>
+  <li><b>容量不是问题</b>：229 规模下直接用，不需要为会话存储单独扩数据库。</li>
+  <li><b>连接池保持 8 或更小</b>：单宿主 8 条在 5,000 会话下仍零错误；恢复时的排队来自池大小，宿主数多时总连接数要按 <code>max_connections</code> 200 预留，和 BE 共用。</li>
+  <li><b>上生产前补测</b>：真实链路的多轮续写和宿主重启恢复；数据库重启时进行中的回合会失败，要确认前端提示可接受。</li>
+  <li><b>清理策略</b>：目前没有任何东西删除旧会话，每事件约 2 KB，需要定期归档或按时间清理。</li>
+</ul>
+
+<h2><span class="no">09</span>测试痕迹与清理</h2>
+<p class="note">测试 schema <code>sdb_load_229</code> 已删除；拉到 229 的测试镜像和语料目录已删除；原始结果保留在 229 的 [主机备份目录]。229 上 xzc 相关的测试规格（<code>byclaw-dsh-xzc</code>、<code>byclaw-dsh-tools-xzc</code>）和 用户A 名下的 xzc 沙箱仍在，测完需要另行清理。</p>
+</main>
+
+<script>
+(() => {
+  const X = [100, 500, 1000, 2000, 3000, 5000]
+  const S = [
+    { key: '229 p99', color: '--series-1', dash: '', v: [6.49, 5.87, 7.42, 10.82, 13.81, 46.58] },
+    { key: '229 p50', color: '--series-2', dash: '', v: [1.66, 1.45, 1.46, 1.5, 1.5, 1.61] },
+    { key: '118 p99（11-02）', color: '--series-3', dash: '6 5', v: [10.5, 12.7, 21.1, 44.7, 65.1, 539.6] },
+  ]
+  const svg = document.getElementById('svg'), tip = document.getElementById('tip'), box = document.getElementById('chart')
+  const W = 900, H = 380, L = 64, R = 190, T = 16, B = 44
+  const ns = 'http://www.w3.org/2000/svg'
+  const el = (n, a) => { const e = document.createElementNS(ns, n); for (const k in a) e.setAttribute(k, a[k]); return e }
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const yMin = 1, yMax = 1000
+  const x = i => L + i * (W - L - R) / (X.length - 1)
+  const y = v => T + (H - T - B) * (1 - (Math.log10(v) - Math.log10(yMin)) / (Math.log10(yMax) - Math.log10(yMin)))
+  function draw() {
+    svg.textContent = ''
+    for (const t of [1, 10, 100, 1000]) {
+      svg.append(el('line', { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: css('--grid'), 'stroke-width': 1 }))
+      const tx = el('text', { x: L - 8, y: y(t) + 4, 'text-anchor': 'end', 'font-size': 12, fill: css('--text-muted') }); tx.textContent = t.toLocaleString() + ' ms'; svg.append(tx)
+    }
+    X.forEach((n, i) => { const tx = el('text', { x: x(i), y: H - B + 20, 'text-anchor': 'middle', 'font-size': 12, fill: css('--text-muted') }); tx.textContent = n.toLocaleString(); svg.append(tx) })
+    const cap = el('text', { x: (L + W - R) / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 12, fill: css('--text-secondary') }); cap.textContent = '同时处于回合中的会话数'; svg.append(cap)
+    const labels = []
+    for (const s of S) {
+      const c = css(s.color)
+      svg.append(el('path', { d: s.v.map((v, i) => (i ? 'L' : 'M') + x(i) + ' ' + y(v)).join(' '), fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-dasharray': s.dash, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }))
+      s.v.forEach((v, i) => svg.append(el('circle', { cx: x(i), cy: y(v), r: 4, fill: c, stroke: css('--surface-1'), 'stroke-width': 2 })))
+      labels.push({ s, y: y(s.v.at(-1)) })
+    }
+    labels.sort((a, b) => a.y - b.y); for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 16) labels[i].y = labels[i - 1].y + 16
+    for (const l of labels) { const tx = el('text', { x: W - R + 12, y: l.y + 4, 'font-size': 12.5, fill: css('--text-primary') }); tx.textContent = l.s.key + ' ' + l.s.v.at(-1) + ' ms'; svg.append(tx) }
+    const cross = el('line', { y1: T, y2: H - B, stroke: css('--text-muted'), 'stroke-width': 1, 'stroke-dasharray': '3 3', visibility: 'hidden' }); svg.append(cross)
+    X.forEach((n, i) => {
+      const hit = el('rect', { x: x(i) - (W - L - R) / (X.length - 1) / 2, y: T, width: (W - L - R) / (X.length - 1), height: H - T - B, fill: 'transparent' })
+      hit.addEventListener('mousemove', ev => {
+        cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible')
+        tip.innerHTML = '<b>' + n.toLocaleString() + ' 个活跃会话</b>' + S.map(s => '<div class="r"><span>' + s.key + '</span><i>' + s.v[i] + ' ms</i></div>').join('')
+        const r = box.getBoundingClientRect(); tip.style.display = 'block'
+        let left = ev.clientX - r.left + 14; if (left + 190 > r.width) left = ev.clientX - r.left - 200
+        tip.style.left = left + 'px'; tip.style.top = (ev.clientY - r.top + 10) + 'px'
+      })
+      hit.addEventListener('mouseleave', () => { tip.style.display = 'none'; cross.setAttribute('visibility', 'hidden') })
+      svg.append(hit)
+    })
+  }
+  draw(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw)
+})()
+</script>
+</body>
+</html>
