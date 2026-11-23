@@ -84,7 +84,7 @@
   <header>
     <h1>工作报告</h1>
     <p class="lead">Agent 基础设施相关的方案、汇报、实测和调研：ByClaw 的 Harness 与工具沙箱、稳定性规划，以及外部系统的研究笔记。每篇都是可以直接打开的单页 HTML。</p>
-    <a class="start" href="harness-ssh-broker-2026-11-23-v2.html"><span class="k">最新 · 2026-11-23</span><span class="t">Harness 到工具沙箱的 SSH：问题、改法与实测</span><span class="d">每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开后，100 人同时首词 p99 29.7 → 16.9 秒。第 2 版补充：探测不再每轮新建连接，60 人整轮完成 24.5 → 13.4 秒。附测试中触发的 BE 死锁与修复。</span></a>
+    <a class="start" href="harness-ssh-broker-2026-11-23-v3.html"><span class="k">最新 · 2026-11-23</span><span class="t">Harness 到工具沙箱的 SSH：问题、改法与实测</span><span class="d">每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开、探测不再每轮新建连接后，60 人整轮完成 24.5 → 13.4 秒，100 人首词 p99 29.7 → 16.9 秒。第 3 版新增 SSH 通道的三张时序图和技术细节。附测试中触发的 BE 死锁与修复。</span></a>
     <input class="search" id="q" type="search" placeholder="按标题或摘要筛选…" autocomplete="off">
   </header>
   <section id="byclaw">
@@ -103,7 +103,7 @@
     <h2><span class="n">02</span>实测与部署</h2>
     <p class="sub">压测报告、性能测试、集群部署手册 · 5 篇</p>
     <ul class="list">
-      <li data-text="harness 到工具沙箱的 ssh：问题、改法与实测 每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开后，100 人同时首词 p99 29.7 → 16.9 秒。第 2 版补充：探测不再每轮新建连接，60 人整轮完成 24.5 → 13.4 秒。附测试中触发的 be 死锁与修复。"><a class="row" href="harness-ssh-broker-2026-11-23-v2.html"><span class="t">Harness 到工具沙箱的 SSH：问题、改法与实测</span><span class="d">每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开后，100 人同时首词 p99 29.7 → 16.9 秒。第 2 版补充：探测不再每轮新建连接，60 人整轮完成 24.5 → 13.4 秒。附测试中触发的 BE 死锁与修复。</span><span class="date">2026-11-23</span></a><div class="older">旧版：<a href="harness-ssh-broker-2026-11-23.html">v1（2026-11-23）</a></div></li>
+      <li data-text="harness 到工具沙箱的 ssh：问题、改法与实测 每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开、探测不再每轮新建连接后，60 人整轮完成 24.5 → 13.4 秒，100 人首词 p99 29.7 → 16.9 秒。第 3 版新增 ssh 通道的三张时序图和技术细节。附测试中触发的 be 死锁与修复。"><a class="row" href="harness-ssh-broker-2026-11-23-v3.html"><span class="t">Harness 到工具沙箱的 SSH：问题、改法与实测</span><span class="d">每条数据流两次 ssh 子进程拖住宿主主线程；改由辅助进程代开、探测不再每轮新建连接后，60 人整轮完成 24.5 → 13.4 秒，100 人首词 p99 29.7 → 16.9 秒。第 3 版新增 SSH 通道的三张时序图和技术细节。附测试中触发的 BE 死锁与修复。</span><span class="date">2026-11-23</span></a><div class="older">旧版：<a href="harness-ssh-broker-2026-11-23-v2.html">v2（2026-11-23）</a> · <a href="harness-ssh-broker-2026-11-23.html">v1（2026-11-23）</a></div></li>
       <li data-text="dsh 会话存储入库压测报告（229） 会话日志存进 opengauss 扛不扛得住：3,000 会话 p99 14 ms、5,000 会话开始排队，全程零错误。"><a class="row" href="session-db-loadtest-229-2026-11-12.html"><span class="t">DSH 会话存储入库压测报告（229）</span><span class="d">会话日志存进 openGauss 扛不扛得住：3,000 会话 p99 14 ms、5,000 会话开始排队，全程零错误。</span><span class="date">2026-11-12</span></a></li>
       <li data-text="harness 单进程承载能力测试报告 单进程能撑多少用户，opengauss 会话库与 websocket 长连接的测试结果。"><a class="row" href="harness-capacity-report-2026-11-05.html"><span class="t">Harness 单进程承载能力测试报告</span><span class="d">单进程能撑多少用户，openGauss 会话库与 WebSocket 长连接的测试结果。</span><span class="date">2026-11-06</span></a></li>
       <li data-text="共享 dsh 宿主性能测试报告 共享宿主在多用户下的性能实测。"><a class="row" href="shared-dsh-host-benchmark-2026-10-20.html"><span class="t">共享 DSH 宿主性能测试报告</span><span class="d">共享宿主在多用户下的性能实测。</span><span class="date">2026-10-20</span></a></li>
