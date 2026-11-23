@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness 到工具沙箱的 SSH：问题、改法与实测 · 2026-11-23</title>
+<style>
+:root{
+  --surface-0:#f4f4f2; --surface-1:#fcfcfb; --border:#e3e2dc; --grid:#ecebe6;
+  --text-primary:#0b0b0b; --text-secondary:#55544f; --text-muted:#85847d;
+  --series-1:#2a78d6; --series-2:#1baf7a; --series-3:#eb6834;
+  --good:#0d7a3e; --warn:#a15c00;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface-0:#121211; --surface-1:#1a1a19; --border:#2e2e2b; --grid:#272724;
+    --text-primary:#f0efec; --text-secondary:#c3c2b7; --text-muted:#8f8e86;
+    --series-1:#3987e5; --series-2:#199e70; --series-3:#d95926;
+    --good:#4cc47f; --warn:#e3a33a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-0);color:var(--text-primary);font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:28px;line-height:1.3;margin:0 0 6px}
+.sub{color:var(--text-secondary);margin:0 0 28px}
+h2{font-size:20px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+h2 .no{color:var(--text-muted);font-weight:500;margin-right:8px}
+p{margin:8px 0}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin:14px 0}
+.lead{font-size:18px;font-weight:600;margin:0 0 6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:16px 0}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile .k{color:var(--text-secondary);font-size:13px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text-secondary);font-weight:600}
+.tw{overflow-x:auto}
+.note{color:var(--text-secondary);font-size:13.5px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text-secondary)}
+.ok{color:var(--good);font-weight:600}
+.w{color:var(--warn);font-weight:600}
+ul{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--grid);padding:1px 5px;border-radius:4px}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--text-secondary);margin:4px 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:22px;height:0;border-top:2px solid}
+.sw.d{border-top-style:dashed}
+.tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;min-width:150px;font-variant-numeric:tabular-nums}
+.tip b{display:block;margin-bottom:4px}
+.tip .r{display:flex;justify-content:space-between;gap:12px;color:var(--text-secondary)}
+.tip .r i{font-style:normal;color:var(--text-primary)}
+</style><style>
+.bars{display:grid;grid-template-columns:86px 1fr 64px;gap:6px 10px;align-items:center;font-size:13.5px;font-variant-numeric:tabular-nums;margin:10px 0 4px}
+.bars .g{grid-column:1/-1;font-weight:600;margin-top:10px;color:var(--text-secondary)}
+.bars .t{height:14px;background:var(--grid);border-radius:4px;overflow:hidden}
+.bars .t i{display:block;height:100%;border-radius:4px}
+.bars .nw i{background:var(--series-2)} .bars .on i{background:var(--series-1)} .bars .off i{background:var(--series-3)}
+.bars .n{text-align:right}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:12px 0}
+.flow div{flex:1 1 150px;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.flow b{display:block;margin-bottom:2px}
+.bad{color:#b3261e;font-weight:600}
+@media (prefers-color-scheme: dark){.bad{color:#f2857d}}
+td.l,th.l{text-align:left;white-space:normal}
+</style>
+<style id="wr-home-style">.wr-home{display:inline-block;margin-bottom:14px;font-size:12px;color:#87867F;text-decoration:none;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}.wr-home:hover{color:#B04A3F}</style>
+</head>
+<body>
+<main>
+<header class="page-head">
+    <a class="wr-home" href="index.html">← 工作报告首页</a>
+<h1>Harness 到工具沙箱的 SSH：问题、改法与实测</h1>
+<p class="sub">229 测试环境 · 2026-11-23 · 被测改动：分支 <code>perf/dsh-ssh-spawn</code>（基于 D0.7.0，三次提交）· 第 2 版· 目标：一台 harness 装更多用户、尾部延迟更低</p>
+</header>
+
+<h2><span class="no">01</span>结论</h2>
+<div class="card">
+  <p class="lead">把“每条数据流开两次 ssh 子进程”这件事从宿主主进程挪到一个小辅助进程后，同一台宿主在 100 人同时发消息时，首词 p99 从 29.7 秒降到 16.9 秒，整轮完成时间减半。</p>
+  <p>60 人以内，首词时间基本没变（它本来就贴近模型自身的耗时），变快的是工具执行：一次 bash 调用的往返中位数从 8.6 秒降到 3.1 秒。全部 第一轮 1,900 轮对话无一失败。</p>
+  <p>当天下午又去掉了两处开销（每轮新建一条 SSH 连接的探测、一处慢排序），60 人时整轮完成中位数再从 16.1 秒降到 13.4 秒，见第 07 节。</p>
+  <p>测试过程中，100 人并发的第 3 轮触发了 BE 自身的一个死锁，229 的对话中断约 2 小时，重启 BE 后恢复。这是 BE 的独立缺陷，与本改动无关，详见第 09 节。</p>
+</div>
+<div class="tiles">
+  <div class="tile"><div class="v">29.7 → 16.9 s</div><div class="k">100 人同时：首词 p99</div></div>
+  <div class="tile"><div class="v">49.8 → 26.8 s</div><div class="k">100 人同时：整轮完成中位数</div></div>
+  <div class="tile"><div class="v">8.6 → 3.1 s</div><div class="k">60 人同时：bash 往返中位数</div></div>
+  <div class="tile"><div class="v">7.6 → 3.1 s</div><div class="k">60 人同时：主线程 24 秒里花在开子进程上的时间</div></div>
+</div>
+<div class="card tw">
+  <table>
+    <tr><th>问题</th><th class="l">答案</th></tr>
+    <tr><td>一台能多装多少人？</td><td class="l">同一台 4 核 16 GB 宿主，改动后 100 人同时发的首词中位数（10.6 秒）已低于改动前（16.5 秒），接近改动前 60–80 人的水平。更高人数没有测，因为 BE 先出了问题。</td></tr>
+    <tr><td>P99 降了吗？</td><td class="l">100 人时降了约 43%。60 人及以下首词 p99 没有可分辨的变化（轮次间波动大于差值）。</td></tr>
+    <tr><td>有没有副作用？</td><td class="l">没有发现。辅助进程常驻约 67 MB；它不可用时自动退回原做法；有一个环境变量可以关掉。</td></tr>
+    <tr><td>还剩什么？</td><td class="l">宿主每轮还会自己开一个 ssh 去探测沙箱里的遗留进程，改动后它成了开子进程耗时的主要来源（约 2.2 秒 / 24 秒）。这是下一步。</td></tr>
+  </table>
+</div>
+
+<h2><span class="no">02</span>现在用 SSH 存在的问题</h2>
+<p>Harness（下称 A）和每个用户的工具沙箱（下称 B）之间走 SSH。A 是一台宿主上的<strong>一个 Node 进程</strong>，同时服务几十个用户。</p>
+<div class="flow">
+  <div><b>① 每个用户一条常驻连接</b>A 里一个 <code>ssh -M</code> 主连接进程，外加一个 Node 的 WebSocket 代理进程（经网关到 B 的 sshd）。实测每条约 14 MB。</div>
+  <div><b>② 每条数据流两次子进程</b>命令的标准输入、输出、错误、控制各是一条流。打开一条流要执行一次 <code>ssh -O forward</code>，关闭时再执行一次 <code>ssh -O cancel</code>。</div>
+  <div><b>③ 每轮一次探测</b>每轮结束前，A 还会另起一个 <code>ssh</code> 到 B 上查有没有遗留进程。</div>
+</div>
+<div class="card">
+  <p class="lead">问题出在 ②：这些子进程是宿主主进程自己在主线程上开的。</p>
+  <ul>
+    <li><strong>量大。</strong>本次实测，一轮“执行一条 bash 再回答”的对话平均触发约 8.7 次 <code>ssh -O</code>（660 轮里共 5,740 次）。</li>
+    <li><strong>单次很贵。</strong>开子进程要复制调用方的内存映射，耗时随进程内存增长：50 MB 的进程约 0.6 ms，1–2.5 GB 的进程 6–17 ms。共享宿主常驻几 GB。</li>
+    <li><strong>全压在一个线程上。</strong>Node 的业务逻辑只有一个主线程，开子进程期间它什么也做不了。60 人同时到达时主线程打满数秒，而同一台机器的另外 3 个核基本空闲。</li>
+    <li><strong>后果。</strong>模型的流式输出、别的用户的工具结果、心跳，都排在这些开子进程的操作后面。人越多，排得越久。</li>
+  </ul>
+</div>
+<p class="note">此前的两次测量已经指向这里：11-05 的单进程容量测试里它占主线程 8.4%；11-18 在 229 上 60 人并发的 CPU 采样里，25 秒中有 9.2 秒花在开子进程上，几乎全部来自 <code>ssh -O</code>。另外两个已知问题：常驻连接每条两个进程（①），以及容器 1 号进程不回收子进程导致的僵尸进程（已通过加子进程回收器解决，本次测试中僵尸数为 0）。</p>
+
+<h2><span class="no">03</span>解决方案</h2>
+<div class="card">
+  <p class="lead">让一个很小的常驻辅助进程代替宿主去开这些 <code>ssh -O</code>。</p>
+  <p>宿主第一次需要时启动它，之后只通过进程间消息告诉它“执行这条命令”，再等它回报结果。辅助进程自己只有几十 MB，开子进程便宜，而且跑在另一个核上。</p>
+</div>
+<div class="card tw">
+  <table>
+    <tr><th>方面</th><th class="l">做法</th></tr>
+    <tr><td>行为不变</td><td class="l">命令参数、输出上限、超时、取消时先温和终止再强制终止，全部照搬 DSH 原来的实现；调用方等到命令真正结束才返回。有一条测试专门比对 DSH 的原实现，上游一改就会报警。</td></tr>
+    <tr><td>退路</td><td class="l">辅助进程起不来、或中途挂掉：当前这条命令改由宿主自己执行；累计挂掉 3 次后不再使用它。设置 <code>BYCLAW_SSH_CONTROL_BROKER=0</code> 可整体关闭。</td></tr>
+    <tr><td>改动范围</td><td class="l">只在工具沙箱插件内：一个约 170 行的模块、一个约 55 行的辅助脚本、接入处 4 行、一份测试。不改 DSH 本体，不改协议，不改 B 侧镜像。</td></tr>
+    <tr><td>没选的做法</td><td class="l">同一沙箱的流复用转发（要改流的生命周期，风险更大）；在 SSH helper 协议里多路复用（最干净，但要改上游协议，周期长）。这两条仍然可以在之后做，与本改动不冲突。</td></tr>
+  </table>
+</div>
+<p class="note">单元测试：插件全套 213 个用例通过 212 个，未通过的 1 个（WebSocket 背压超时）和 1 个无法加载的测试文件是镜像环境的既有问题。</p>
+
+<h2><span class="no">04</span>怎么测的</h2>
+<div class="card tw">
+<table>
+  <tr><th>项目</th><th class="l">内容</th></tr>
+  <tr><td>环境</td><td class="l">229 测试环境。无状态共享宿主一台：MicroVM，4 核 16 GB，镜像 D0.7.0 加本改动。每个用户一个独立的工具沙箱。BE 为 D0.7.0。模型 deepseek-v4-flash。工作日中午，平台上有其他人在用。</td></tr>
+  <tr><td>负载</td><td class="l">100 个压测账号，全部预热在同一台宿主上。每轮每人开一个新会话，同时发送“用 bash 执行 hostname &amp;&amp; date，然后用一句话告诉我结果”。</td></tr>
+  <tr><td>对照方式</td><td class="l"><strong>同一台宿主、同一批用户，运行时开关这项改动。</strong>关闭时换回与 DSH 原实现逐行相同的做法（宿主自己开子进程）。这样排除了宿主之间、预热状态之间的差异。20、40、60 人各跑 5 轮；60 人档改动开启另在第一台宿主上多跑了 5 轮；100 人档开启、关闭交替各 2 轮。</td></tr>
+  <tr><td>为什么不换镜像对照</td><td class="l">MicroVM 从平台模板启动，改规格里的镜像名不会重建模板，新宿主仍是旧内容。运行时开关更干净，也不用动平台模板。</td></tr>
+  <tr><td>指标</td><td class="l"><strong>首词</strong>：发出消息到模型第一次调用工具。<strong>工具往返</strong>：bash 调用开始到结果返回。<strong>整轮完成</strong>：发出消息到回答结束。都在压测客户端的 WebSocket 上计时。</td></tr>
+  <tr><td>采样</td><td class="l">60 人并发时对宿主主进程做约 24 秒的 CPU 采样，开启、关闭各一次；同时每 0.5 秒记录主线程占用。</td></tr>
+</table>
+</div>
+
+<h2><span class="no">05</span>实测结果</h2>
+<p>共 1,900 轮对话，全部成功。表中每格是 p50 / p90 / p99，单位秒。</p>
+<div class="card tw">
+<table>
+  <tr><th>同时人数</th><th>轮数（开/关）</th><th>首词 · 开启</th><th>首词 · 关闭</th><th>工具往返 · 开启</th><th>工具往返 · 关闭</th><th>整轮完成 · 开启</th><th>整轮完成 · 关闭</th></tr>
+  <tr><td>20</td><td>100 / 100</td><td>3.9 / 5.1 / 6.9</td><td>3.9 / 4.7 / 5.7</td><td>0.8 / 3.3 / 6.3</td><td>3.3 / 4.6 / 6.6</td><td>7.3 / 12.2 / 30.3</td><td>10.8 / 12.1 / 30.6</td></tr>
+  <tr><td>40</td><td>200 / 200</td><td>5.0 / 6.7 / 8.9</td><td>5.2 / 6.5 / 8.9</td><td>1.6 / 7.8 / 9.6</td><td>5.1 / 11.8 / 14.3</td><td>12.2 / 29.1 / 39.3</td><td>17.1 / 34.2 / 44.8</td></tr>
+  <tr><td>60</td><td>600 / 300</td><td>6.5 / 9.4 / 12.4</td><td>6.7 / 10.0 / 11.8</td><td>3.1 / 8.1 / 12.1</td><td>8.6 / 19.1 / 35.1</td><td>16.1 / 28.9 / 41.2</td><td>24.5 / 40.7 / 49.3</td></tr>
+  <tr><td>100</td><td>200 / 200</td><td class="ok">10.6 / 15.4 / 16.9</td><td>16.5 / 23.9 / 29.7</td><td class="ok">5.8 / 13.9 / 36.9</td><td>16.1 / 40.1 / 61.6</td><td class="ok">26.8 / 42.3 / 57.7</td><td>49.8 / 75.2 / 96.9</td></tr>
+</table>
+</div>
+<div class="card"><div style="font-weight:600">图 1 · 首词时间 p99（发出消息到模型第一次调用工具）</div><div class="legend"><span><i class="sw" style="border-color:var(--series-1)"></i>改动开启</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动关闭</span></div><div class="bars"><div class="g">20 人同时</div><div>开启</div><div class="t on"><i style="width:22.9%"></i></div><div class="n">6.9 s</div><div>关闭</div><div class="t off"><i style="width:18.9%"></i></div><div class="n">5.7 s</div><div class="g">40 人同时</div><div>开启</div><div class="t on"><i style="width:29.6%"></i></div><div class="n">8.9 s</div><div>关闭</div><div class="t off"><i style="width:29.6%"></i></div><div class="n">8.9 s</div><div class="g">60 人同时</div><div>开启</div><div class="t on"><i style="width:41.2%"></i></div><div class="n">12.4 s</div><div>关闭</div><div class="t off"><i style="width:39.4%"></i></div><div class="n">11.8 s</div><div class="g">100 人同时</div><div>开启</div><div class="t on"><i style="width:56.3%"></i></div><div class="n">16.9 s</div><div>关闭</div><div class="t off"><i style="width:99.1%"></i></div><div class="n">29.7 s</div></div></div>
+<div class="card"><div style="font-weight:600">图 2 · 工具往返时间中位数（模型发出 bash 调用到拿到结果）</div><div class="legend"><span><i class="sw" style="border-color:var(--series-1)"></i>改动开启</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动关闭</span></div><div class="bars"><div class="g">20 人同时</div><div>开启</div><div class="t on"><i style="width:4.8%"></i></div><div class="n">0.8 s</div><div>关闭</div><div class="t off"><i style="width:19.5%"></i></div><div class="n">3.3 s</div><div class="g">40 人同时</div><div>开启</div><div class="t on"><i style="width:9.2%"></i></div><div class="n">1.6 s</div><div>关闭</div><div class="t off"><i style="width:29.8%"></i></div><div class="n">5.1 s</div><div class="g">60 人同时</div><div>开启</div><div class="t on"><i style="width:18.1%"></i></div><div class="n">3.1 s</div><div>关闭</div><div class="t off"><i style="width:50.4%"></i></div><div class="n">8.6 s</div><div class="g">100 人同时</div><div>开启</div><div class="t on"><i style="width:34.2%"></i></div><div class="n">5.8 s</div><div>关闭</div><div class="t off"><i style="width:94.6%"></i></div><div class="n">16.1 s</div></div></div>
+<div class="card"><div style="font-weight:600">图 3 · 整轮完成时间中位数（发出消息到回答结束）</div><div class="legend"><span><i class="sw" style="border-color:var(--series-1)"></i>改动开启</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动关闭</span></div><div class="bars"><div class="g">20 人同时</div><div>开启</div><div class="t on"><i style="width:14.6%"></i></div><div class="n">7.3 s</div><div>关闭</div><div class="t off"><i style="width:21.5%"></i></div><div class="n">10.8 s</div><div class="g">40 人同时</div><div>开启</div><div class="t on"><i style="width:24.4%"></i></div><div class="n">12.2 s</div><div>关闭</div><div class="t off"><i style="width:34.2%"></i></div><div class="n">17.1 s</div><div class="g">60 人同时</div><div>开启</div><div class="t on"><i style="width:32.1%"></i></div><div class="n">16.1 s</div><div>关闭</div><div class="t off"><i style="width:49.0%"></i></div><div class="n">24.5 s</div><div class="g">100 人同时</div><div>开启</div><div class="t on"><i style="width:53.6%"></i></div><div class="n">26.8 s</div><div>关闭</div><div class="t off"><i style="width:99.5%"></i></div><div class="n">49.8 s</div></div></div>
+<div class="card">
+  <p class="lead">怎么读这些数</p>
+  <ul>
+    <li><strong>60 人以内首词没变。</strong>首词出现在模型第一次调用工具的时刻，这之前开的流很少；同一轮里别人的流虽然也在抢主线程，但这个量级还没把首词拖出可分辨的差距。20 人时首词约 3.9 秒，已接近模型自身耗时。</li>
+    <li><strong>工具执行在每一档都明显变快。</strong>流是在执行命令时成批打开和关闭的，所以开子进程的排队主要落在这一段。中位数在 20、40、60、100 人时分别是原来的 25%、31%、36%、36%。</li>
+    <li><strong>100 人时首词也被拖慢了，改动把它拉了回来。</strong>关闭时主线程长期排队，连模型的流式输出都处理不及时；开启后 100 人的首词中位数（10.6 秒）低于关闭时的 100 人（16.5 秒）。</li>
+    <li><strong>p99 一栏波动大。</strong>20 人档开启反而略高（6.9 对 5.7 秒），差值来自个别轮次里两三个慢请求，属于模型侧和环境的波动。</li>
+  </ul>
+</div>
+
+<h2><span class="no">06</span>主线程时间去了哪里</h2>
+<p>60 人并发，同一台宿主，各采样约 24 秒。</p>
+<div class="card"><div style="font-weight:600">图 4 · 60 人并发时宿主主线程约 24 秒的去向</div><div class="legend"><span><i class="sw" style="border-color:var(--series-1)"></i>改动开启</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动关闭</span></div><div class="bars"><div class="g">开子进程（spawn）</div><div>开启</div><div class="t on"><i style="width:38.4%"></i></div><div class="n">3.1 s</div><div>关闭</div><div class="t off"><i style="width:95.4%"></i></div><div class="n">7.6 s</div><div class="g">空闲</div><div>开启</div><div class="t on"><i style="width:56.8%"></i></div><div class="n">4.5 s</div><div>关闭</div><div class="t off"><i style="width:19.1%"></i></div><div class="n">1.5 s</div></div></div>
+<div class="card tw">
+<table>
+  <tr><th>项目（秒）</th><th>改动关闭</th><th>改动开启</th><th class="l">说明</th></tr>
+  <tr><td>开子进程合计</td><td>7.63</td><td>3.07</td><td class="l">关闭时占采样时间的 31%</td></tr>
+  <tr><td>　其中 <code>ssh -O</code>（开流 + 关流）</td><td>6.85</td><td>0</td><td class="l">开流 3.80，关流 3.22；开启后完全从主线程消失</td></tr>
+  <tr><td>　其中遗留进程探测</td><td>0.65</td><td>2.20</td><td class="l">开启后反而升高，原因未核实；它现在是剩余开子进程耗时的主体</td></tr>
+  <tr><td>主线程空闲</td><td>1.53</td><td>4.54</td><td class="l">空闲越多，越能及时处理模型输出和别的用户</td></tr>
+  <tr><td>垃圾回收</td><td>2.05</td><td>2.38</td><td class="l">基本不变</td></tr>
+  <tr><td>主线程占用 ≥ 70% 的时长（40 秒窗口内）</td><td>20.5</td><td>15.5</td><td class="l">另一台宿主上开启时为 9.5</td></tr>
+</table>
+</div>
+<p class="note">在另一台宿主上对“开启”做的第二次采样结果一致：开子进程 2.95 秒，空闲 4.58 秒。10 人并发的一次进程采样里，辅助进程代开了约 96 次 <code>ssh -O</code>，宿主自己只开了约 10 次（探测和重连主连接）。</p>
+
+<h2><span class="no">07</span>第二轮：再去掉两处，并复测</h2>
+<p>第一轮测完后，按上面采样指出的顺序又改了两处，当天下午做成新镜像、重建模板后在同一环境复测。</p>
+<div class="card tw">
+<table>
+  <tr><th>改动</th><th class="l">问题</th><th class="l">改法</th></tr>
+  <tr><td>遗留进程探测</td><td class="l">比第一轮估计的更重：每轮对话结束后，宿主会<strong>新建一条完整的 SSH 连接</strong>去问沙箱还有没有遗留进程——宿主开一个 <code>ssh</code>，它再拉起一个约 60 MB 的 Node 代理进程，经网关重新握手。每人每轮一次。</td><td class="l">探测命令带上已有主连接的控制套接字，直接走那条连接（OpenSSH 多路复用），并交给辅助进程去开。主连接不在时自动退回原做法。</td></tr>
+  <tr><td>授权资源排序</td><td class="l">每个用户的上下文每隔几秒重读一次授权，排序时每次比较都新建一个排序器。</td><td class="l">共用一个排序器。结果顺序完全相同，单独测快约 20 倍。</td></tr>
+</table>
+</div>
+<p>复测前先确认行为：10 轮对话里，10 次探测全部走已有连接并由辅助进程开出，没有再拉起任何代理进程；宿主主进程自己只开了 1 个子进程（重连主连接）。</p>
+<div class="card tw">
+<table>
+  <tr><th>同时人数</th><th>轮数</th><th>首词 p50 / p90 / p99</th><th>工具往返 p50 / p90 / p99</th><th>整轮完成 p50 / p90</th></tr>
+  <tr><td>20</td><td>100</td><td>3.9 / 4.9 / 5.7</td><td>0.8 / 1.1 / 2.1</td><td>6.7 / 8.3</td></tr>
+  <tr><td>40</td><td>200</td><td>5.0 / 6.6 / 8.3</td><td>0.8 / 4.3 / 6.6</td><td>10.2 / 24.7</td></tr>
+  <tr><td>60</td><td>240</td><td>6.7 / 8.8 / 10.5</td><td>2.1 / 8.4 / 12.3</td><td>13.4 / 26.8</td></tr>
+</table>
+</div>
+<div class="card"><div style="font-weight:600">图 5 · 整轮完成时间中位数</div><div class="legend"><span><i class="sw" style="border-color:var(--series-2)"></i>三项改动都开</span><span><i class="sw" style="border-color:var(--series-1)"></i>只有第一项</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动前</span></div><div class="bars"><div class="g">20 人同时</div><div>三项</div><div class="t nw"><i style="width:26.9%"></i></div><div class="n">6.7 s</div><div>第一项</div><div class="t on"><i style="width:29.1%"></i></div><div class="n">7.3 s</div><div>改动前</div><div class="t off"><i style="width:43.0%"></i></div><div class="n">10.8 s</div><div class="g">40 人同时</div><div>三项</div><div class="t nw"><i style="width:40.8%"></i></div><div class="n">10.2 s</div><div>第一项</div><div class="t on"><i style="width:48.8%"></i></div><div class="n">12.2 s</div><div>改动前</div><div class="t off"><i style="width:68.4%"></i></div><div class="n">17.1 s</div><div class="g">60 人同时</div><div>三项</div><div class="t nw"><i style="width:53.5%"></i></div><div class="n">13.4 s</div><div>第一项</div><div class="t on"><i style="width:64.2%"></i></div><div class="n">16.1 s</div><div>改动前</div><div class="t off"><i style="width:98.0%"></i></div><div class="n">24.5 s</div></div></div>
+<div class="card"><div style="font-weight:600">图 6 · 工具往返时间 p90</div><div class="legend"><span><i class="sw" style="border-color:var(--series-2)"></i>三项改动都开</span><span><i class="sw" style="border-color:var(--series-1)"></i>只有第一项</span><span><i class="sw" style="border-color:var(--series-3)"></i>改动前</span></div><div class="bars"><div class="g">20 人同时</div><div>三项</div><div class="t nw"><i style="width:5.4%"></i></div><div class="n">1.1 s</div><div>第一项</div><div class="t on"><i style="width:16.7%"></i></div><div class="n">3.3 s</div><div>改动前</div><div class="t off"><i style="width:23.1%"></i></div><div class="n">4.6 s</div><div class="g">40 人同时</div><div>三项</div><div class="t nw"><i style="width:21.7%"></i></div><div class="n">4.3 s</div><div>第一项</div><div class="t on"><i style="width:39.1%"></i></div><div class="n">7.8 s</div><div>改动前</div><div class="t off"><i style="width:59.1%"></i></div><div class="n">11.8 s</div><div class="g">60 人同时</div><div>三项</div><div class="t nw"><i style="width:41.8%"></i></div><div class="n">8.3 s</div><div>第一项</div><div class="t on"><i style="width:40.4%"></i></div><div class="n">8.1 s</div><div>改动前</div><div class="t off"><i style="width:95.4%"></i></div><div class="n">19.1 s</div></div></div>
+<div class="card">
+  <p class="lead">怎么读</p>
+  <ul>
+    <li><strong>整轮完成时间每一档都再降一截。</strong>60 人时中位数 24.5 → 16.1 → 13.4 秒，三项合计约为改动前的 55%。</li>
+    <li><strong>工具往返的尾部在 20、40 人档明显收窄</strong>（p90 分别 3.3 → 1.1 秒、7.8 → 4.3 秒）；60 人档中位数 3.1 → 2.1 秒，p90 没有变化。</li>
+    <li><strong>首词 p99 在 60 人档从 12.4 降到 10.5 秒</strong>，中位数不变。这一档只有 4 轮，差值的把握一般。</li>
+    <li><strong>整机 CPU 降了。</strong>60 人档宿主虚机平均占用从约 165% 降到约 90–120%，少掉的主要是每轮启动一个 Node 代理进程的开销。</li>
+  </ul>
+  <p class="note">这一组与第 05 节不在同一台宿主上，时间也隔了约 3 小时，没有做运行时开关对照；20 人档属于模型波动范围。原计划的 60 人第 5 轮和 CPU 采样没有取到有效数据：测试用的模型账号额度在那时用完，上游开始返回额度不足。</p>
+</div>
+
+<h2><span class="no">08</span>还没解决的，和下一步</h2>
+<div class="card tw">
+<table>
+  <tr><th>顺序</th><th class="l">事项</th><th class="l">依据 / 状态</th></tr>
+  <tr><td class="ok">已做</td><td class="l">遗留进程探测改走已有连接，并交给辅助进程。</td><td class="l">见第 07 节。</td></tr>
+  <tr><td class="ok">已做</td><td class="l">授权资源排序共用一个排序器。</td><td class="l">见第 07 节。</td></tr>
+  <tr><td>1</td><td class="l">在三项改动之上重新做一次 CPU 采样，确认主线程里还剩什么。</td><td class="l">这次因模型额度用完没有取到。</td></tr>
+  <tr><td>2</td><td class="l">一台宿主跑多个进程，把 4 个核都用上。</td><td class="l">即使改动后，主线程仍是唯一会打满的线程，整机平均只用到 1–2 核。这是容量上最大的一块，但涉及平台如何分配用户，需要先定方案。</td></tr>
+  <tr><td>3</td><td class="l">流复用或协议内多路复用，从根上减少 <code>ssh -O</code> 的次数。</td><td class="l">每轮约 8.7 次；辅助进程解决了“谁来开”，没有减少“开多少”。</td></tr>
+  <tr><td>4</td><td class="l">常驻连接改为宿主进程内持有，去掉每用户两个进程。</td><td class="l">11-06 实测：现状每条约 14 MB，进程内约 40 KB。</td></tr>
+  <tr><td>5</td><td class="l">修好 BE 的死锁后，补测 80、100 人及以上。</td><td class="l">BE 目前是比宿主更靠前的上限，见第 09 节。</td></tr>
+</table>
+</div>
+
+<h2><span class="no">09</span>测试中的事故：BE 死锁</h2>
+<div class="card">
+  <p class="lead"><span class="bad">100 人并发的第 3 轮开始后，229 上所有人的对话都没有响应，持续约 2 小时。</span></p>
+  <ul>
+    <li><strong>经过。</strong>12:19 发起第 3 轮 100 人并发（前两轮均 100/100 成功）；12:20 起 BE 的对话日志量骤降，新对话收不到任何返回，登录正常。14:19 重启 BE 后恢复，重启后用一条真实对话验证通过。</li>
+    <li><strong>原因。</strong>相隔 6 分钟的两次线程转储一致：BE 的 24 个虚拟线程载体全部被占住；同一批 10 个平台线程一直等同一把日志输出锁，而持锁者不在任何平台线程里；另有线程卡在一个整体加了 <code>synchronized</code> 的输出管理对象上。这是 JDK 21 上“虚拟线程在 synchronized 里被钉住，载体耗尽，持锁的虚拟线程再也得不到运行机会”的典型死锁。</li>
+    <li><strong>与本改动的关系。</strong>无关。它发生在 BE 进程内，由 100 个对话同时到达触发；当时宿主运行正常，主线程空闲。</li>
+    <li><strong>处置。</strong>先断开了 55 个卡住 5 分钟以上的数据库会话，无效；确认只能重启后，经确认执行了 BE 容器重启，约 30 秒恢复健康。</li>
+    <li><strong>修复。</strong>已单独提交：对话上下文表改用显式锁，只在读写表的瞬间持有，日志挪到锁外。附带的测试在旧代码上能稳定复现这次卡死（虚拟线程数超过载体数、同时经同一个带锁的日志输出），修复后通过。同类写法在其他约 20 处还有，但都不在每轮对话的路径上，留作后续。合入并部署之前，不在 229 上再跑 100 人同时发。</li>
+    <li><strong>另一处影响。</strong>下午复测临近结束时，测试所用模型账号的额度被用完，该模型在 229 上开始间歇返回额度不足，需要补充额度后才能恢复。</li>
+  </ul>
+</div>
+
+<h2><span class="no">10</span>环境变更与恢复</h2>
+<div class="card tw">
+<table>
+  <tr><th>变更</th><th class="l">测试期间</th><th class="l">结束后</th></tr>
+  <tr><td>无状态用户名单</td><td class="l">加入 100 个压测账号</td><td class="l">已从备份还原</td></tr>
+  <tr><td>沙箱数量上限</td><td class="l">30 → 150</td><td class="l">已还原为 30</td></tr>
+  <tr><td>无状态组空闲回收时间</td><td class="l">180 → 7200 秒</td><td class="l">已还原为 180</td></tr>
+  <tr><td>无状态规格</td><td class="l">镜像名临时改过一次又改回</td><td class="l">与测试前备份逐字一致</td></tr>
+  <tr><td>压测宿主</td><td class="l">先后两台</td><td class="l">均已释放</td></tr>
+  <tr><td>BE</td><td class="l">发生死锁</td><td class="l">容器重启一次，镜像和配置未变</td></tr>
+  <tr><td>无状态模板（下午复测）</td><td class="l">换成含三项改动的镜像并重建</td><td class="l">已改回测试前的镜像并重建，规格与备份一致</td></tr>
+  <tr><td>测试模型的账号额度</td><td class="l">被压测用完</td><td class="l"><span class="bad">未恢复，需补充额度</span></td></tr>
+</table>
+</div>
+<p class="note">无状态规格在测试前就已经指向带本改动的镜像（11-19 起），这一点保持不变。</p>
+
+<h2><span class="no">11</span>局限</h2>
+<ul>
+  <li>100 人档只有开启、关闭各 2 轮（200 轮对话），第 3 轮因 BE 死锁作废。方向明确，具体数值的把握不如其他档。</li>
+  <li>只测了一种对话（一次 bash 调用）。流更多的场景（长命令、多次工具调用、浏览器）收益应当更大，但没有测。</li>
+  <li>所有人同时发送是最坏情形；真实流量是错开的。</li>
+  <li>模型侧耗时有波动，20 人档的 p99 差异在波动范围内。</li>
+  <li>宿主侧三项改动尚未提交合并请求；合并前还需要在 D0.6.0 上同样验证一次单元测试。</li>
+  <li>第二轮只有“改动后”的数据，与第一轮不在同一台宿主上，60 人档只有 4 轮。</li>
+</ul>
+</main>
+</body>
+</html>
